@@ -147,6 +147,9 @@ int hal_disk_write(int slot, uint32_t lba, const uint8_t *buf)
 int hal_ser_get(void) { uint32_t v = IO(R_SER); return (v & 0x100) ? (int)(v & 0xFF) : -1; }
 int hal_ser_put(uint8_t c) { if (IO(R_SERF) & 1) return 1; IO(R_SER) = c; return 0; }
 
+int hal_esp_get(void) { uint32_t v = IO(0x74); return (v & 0x100) ? (int)(v & 0xFF) : -1; }
+int hal_esp_put(uint8_t c) { if (IO(0x70) & 1) return 1; IO(0x70) = c; return 0; }
+
 void hal_mouse(int *dx, int *dy, uint8_t *buttons)
 {
 	uint32_t v = IO(R_MOUSE);

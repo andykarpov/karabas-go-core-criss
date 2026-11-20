@@ -114,9 +114,11 @@ assign WRESET_N = 1'b1;
 assign WD = 16'bz;
 
 assign ESP32_SPI_CS_N = 1'b1;
+// the ESP8266 (stock AT firmware, 115200 8N1, CTS flow control): criss_esp in criss_soc
+wire esp_txd, esp_cts_n;
 assign UART_RX = 1'bz;
-assign UART_TX = 1'bz;
-assign UART_CTS = 1'bz;
+assign UART_TX = esp_txd;
+assign UART_CTS = esp_cts_n;
 
 assign TAPE_OUT = 1'b0;
 
@@ -302,6 +304,7 @@ wire [13:0] sd_off;
 wire [31:0] sd_wd, sd_rd;
 
 criss_soc soc (
+	.esp_rxd(UART_RX), .esp_txd(esp_txd), .esp_cts_n(esp_cts_n),
 	.clk(clk_sys),
 	.reset(areset | sw_reset),
 	.ld_kind(ld_kind), .ld_active(ld_active), .ld_addr(ld_addr), .ld_data(ld_data), .ld_wr(ld_wr), .ld_ready(ld_ready),

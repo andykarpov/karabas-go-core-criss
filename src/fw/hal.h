@@ -52,6 +52,9 @@ int hal_disk_write(int slot, uint32_t lba, const uint8_t *buf);
 // the USB serial port of the board (RS-232 of CRISS)
 int hal_ser_get(void);          // a byte, -1 if none
 int hal_ser_put(uint8_t c);     // 0 = taken, 1 = full
+// the ESP8266 of the board (UART 115200)
+int hal_esp_get(void);          // a byte, -1 if none
+int hal_esp_put(uint8_t c);     // 0 = taken, 1 = busy
 // mouse: movement since the last call, buttons (bit 0 left, 1 right, 2 middle)
 void hal_mouse(int *dx, int *dy, uint8_t *buttons);
 // the clock of the board: DS1307 registers 00..06 (BCD) of kg_mcu2

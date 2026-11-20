@@ -9,6 +9,7 @@
 #include "io.h"
 #include "hal.h"
 #include "con.h"
+#include "net.h"
 #include <string.h>
 
 #define NV_SLOT 4
@@ -16,12 +17,13 @@
 #define NV_MAGIC 0x56534E43u      // "CNSV"
 
 static uint8_t sec[512];
-static int asked, have_file;
+static int asked, have_file, loaded;
 
 void nv_init(void)
 {
 	(void)asked;
 	have_file = 0;
+	loaded = 0;
 }
 
 static int nv_ready(void)
@@ -38,6 +40,7 @@ static int nv_load_settings(void)
 	uint32_t m = sec[0] | sec[1] << 8 | sec[2] << 16 | (uint32_t)sec[3] << 24;
 	if (m != NV_MAGIC) return 0;
 	memcpy(io_settings, sec + 16, sizeof io_settings);
+	net_settings();
 	return 1;
 }
 
@@ -116,6 +119,5 @@ int nv_snap_load(int n, z80regs_t *r)
 void nv_poll(void)
 {
 	// the settings once the file is there
-	static int loaded;
 	if (!loaded && nv_ready()) { loaded = 1; nv_load_settings(); }
 }
