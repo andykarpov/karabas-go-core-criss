@@ -158,13 +158,13 @@ ESP на плате (проба 2026-11-20 через `AT+KARABAS=esp` boot-яд
 
 Ход (2026-11-20): шаги 1–6 сделаны. ПК: `sim/tests/run.sh` (t1–t5, t9, t10, t11 на поддельной ESP 127.0.0.2 против `netpeer.py`), `sim/esp/run.sh` (петля UART; нашла ошибку: `rx_valid` на такт раньше данных при записи в пустой буфер — исправлено). Плата Mini G 26112006 (7 803 LUT, 74 % слайсов, тайминги выполнены): t11 против ПК по Wi-Fi — LAN UP (IP ESP 192.168.1.114), UDP-эхо, PING 8B (AT+PING), ARP 82, консоль по UDP в обе стороны (`docs/f4-t11-minig.jpg`). Попутно (master 2fe3004): чтение SW по 0x50 / 0x54 закрывало REG4 / REG5 → IX, BC', DE', HL' портились на каждой ловушке с Ф3.6; SW перенесены на 0x78 / 0x7C, тест t10.
 
-### Ф5 — Go / Mini и выпуск
+### Ф5 — Go / Mini и выпуск — ГОТОВО
 
 Сборка для всех плат, README (en / ru), репозиторий публичный, `cores.json`.
 
 README (пользователь 2026-11-20) — подробный, «как чего куда»: устройство ядра (Z80 + помощник VexRiscv, ловушки ED, порты), файлы на SD (`/criss`, `.cpm`, `.nvr`) и пункты OSD, сборка (ПЗУ данных, прошивка помощника, ISE), тесты (ПК / RTL / плата), сетевой стек (ESP8266 с заводской AT, что эмулируется из API ENC28J60 и что нет, настройки `nvrset.py`, консоль / LST / PUNCH / READER по UDP), карта исходников (`src/fw`, `src/tools`, `src/sim`, `docs/re`), отличия от 4.67, авторство и источники.
 
-Ход (2026-11-20): топы Go / Mini делает `src/tools/mktops.py` (из core-doom; SAM2695 в сбросе, без АЦП, ESP_RESET_N / BOOT_N не трогаем); ucf / ut — из core-doom. Сборки 26112006: Go 6 595 LUT (43 %), 63 % слайсов; Mini 7 823 LUT (52 %), 75 % слайсов; Mini G 7 803 LUT, 74 % — тайминги выполнены везде. Go / Mini на плате не запускались. README (en / ru) подробный. Осталось: репозиторий публичным, строка в `cores.json` и Sources README репозитория karabas-go.
+Ход (2026-11-20): топы Go / Mini делает `src/tools/mktops.py` (из core-doom; SAM2695 в сбросе, без АЦП, ESP_RESET_N / BOOT_N не трогаем); ucf / ut — из core-doom. Сборки 26112006: Go 6 595 LUT (43 %), 63 % слайсов; Mini 7 823 LUT (52 %), 75 % слайсов; Mini G 7 803 LUT, 74 % — тайминги выполнены везде. Go / Mini на плате не запускались. README (en / ru) подробный. Выпуск 2026-11-20: репозиторий публичный (github.com/andykarpov/karabas-go-core-criss), karabas-go #45 (`cores.json`, Sources README / README.ru), синхронизация положила `cores/criss.kg` 26112006 (karabas-go 3bf12be).
 
 ### Беклог
 
