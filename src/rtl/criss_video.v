@@ -17,6 +17,11 @@
  32 KB, byte (page * 256 + char), page = font * 20 + raster line (fw/rom.h layout), written by the
  helper (font_we on clk_sys). Cursor: the character 0 of the font at the cursor offset (0xFFFF: off),
  0.5 s on / 0.5 s off (the peripheral MCU of CRISS does it the same way).
+
+ Colour (the CLR module of CRISS 6.x, docs/re/periph.md 5): the colour of the dots of each character
+ cell, 3 bits RGB111 (bit 0 R, bit 1 G, bit 2 B), black background; a colour RAM at the same offsets as
+ the screen copy, written by the helper (col_we), which keeps the CLR model (static colour = the
+ whole RAM filled).
 */
 module criss_video (
 	input wire clk_sys,
@@ -26,6 +31,9 @@ module criss_video (
 	input wire font_we,
 	input wire [14:0] font_wa,
 	input wire [7:0] font_wd,
+	input wire col_we,
+	input wire [10:0] col_wa,
+	input wire [2:0] col_wd,
 	input wire [7:0] vstat_i,     // clk_sys, static
 	input wire [15:0] cursor_i,   // clk_sys, static
 
@@ -50,6 +58,12 @@ wire [7:0] font_q;
 kg_sdpram #(.DW(8), .AW(15)) font (
 	.clka(clk_sys), .wea(font_we), .addra(font_wa), .dina(font_wd),
 	.clkb(clk_pix), .enb(1'b1), .addrb(font_ra), .doutb(font_q)
+);
+
+wire [7:0] col_q;
+kg_sdpram #(.DW(8), .AW(11)) colr (
+	.clka(clk_sys), .wea(col_we), .addra(col_wa), .dina({ 5'd0, col_wd }),
+	.clkb(clk_pix), .enb(1'b1), .addrb(scr_ra), .doutb(col_q)
 );
 
 // the code pages of the rows for page 7 (Z80 FF80..FF98), snooped on the writes
@@ -156,6 +170,7 @@ wire [10:0] addr_c = row_base + { 4'd0, hf[9:3] };
 reg [3:0] st = 4'd0;            // stage flags 1..3
 reg cur1 = 1'b0, cur2 = 1'b0;
 reg [7:0] next = 8'd0, sh = 8'd0;
+reg [2:0] col2 = 3'd2, col_next = 3'd2, col_sh = 3'd2;
 always @(posedge clk_pix) begin
 	st <= { st[2:0], fetch0 };
 	if (fetch0) begin
@@ -163,11 +178,16 @@ always @(posedge clk_pix) begin
 		cur1 <= blink_on && { 5'd0, addr_c } == cursor;
 	end
 	cur2 <= cur1;
-	if (st[1])          // scr_q = the byte of scr_ra (stage 1 read it)
+	if (st[1]) begin    // scr_q, col_q = the bytes of scr_ra (stage 1 read them)
 		font_ra <= { page, 8'd0 } + { 7'd0, cur2 ? 8'd0 : scr_q };
-	if (st[3])          // font_q = the byte of font_ra
+		col2 <= col_q[2:0];
+	end
+	if (st[3]) begin    // font_q = the byte of font_ra
 		next <= font_q;
+		col_next <= col2;
+	end
 	sh <= load ? next : { sh[6:0], 1'b0 };
+	if (load) col_sh <= col_next;
 end
 
 // ------------------------------------------------------------------ output (one clock after sh)
@@ -177,7 +197,7 @@ always @(posedge clk_pix) begin
 	hs <= hd >= 10'd656 && hd < 10'd752;
 	vs <= vc >= 10'd490 && vc < 10'd492;
 	de <= hd < 10'd640 && vc < 10'd480;
-	rgb <= (!sleep && sh[7]) ? 24'h00FF00 : 24'h000000;
+	rgb <= (!sleep && sh[7]) ? { {8{col_sh[0]}}, {8{col_sh[1]}}, {8{col_sh[2]}} } : 24'h000000;
 end
 
 endmodule

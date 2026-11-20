@@ -5,6 +5,8 @@
 #define IO(o)    (*(volatile uint32_t *)(0x80000000u + (o)))
 #define Z80M(a)  (*(volatile uint32_t *)(0x90000000u + 4u * (a)))
 #define FONT(i)  (*(volatile uint32_t *)(0xA0000000u + 4u * (i)))
+#define SCR(i)   (*(volatile uint32_t *)(0xB0000000u + 4u * (i)))
+#define COL(i)   (*(volatile uint32_t *)(0xC0000000u + 4u * (i)))
 #define SDBUF(i) (*(volatile uint32_t *)(0x80001000u + 4u * (i)))
 
 #define R_DBG    0x00
@@ -85,6 +87,9 @@ void hal_fonts(const uint8_t *f, uint32_t len)
 {
 	for (uint32_t i = 0; i < len; i++) FONT(i) = f[i];
 }
+
+void hal_scr(uint16_t off, uint8_t c) { SCR(off) = c; }
+void hal_col(uint16_t off, uint8_t colour) { COL(off) = colour; }
 
 int hal_ps2(void)
 {

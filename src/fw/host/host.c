@@ -93,6 +93,9 @@ void hal_wr(uint16_t a, uint8_t v) { mem[a] = v; }
 const uint8_t *hal_rom(void) { return rom; }
 void hal_video(uint8_t vstat, uint16_t cursor) { video_vstat = vstat; video_cursor = cursor; }
 void hal_fonts(const uint8_t *f, uint32_t len) { (void)f; (void)len; }
+static uint8_t vscr[2048], vcol[2048];      // the video copies (vscr: ESC | writes only)
+void hal_scr(uint16_t off, uint8_t c) { vscr[off & 2047] = c; }
+void hal_col(uint16_t off, uint8_t colour) { vcol[off & 2047] = colour & 7; }
 uint32_t hal_ms(void) { return (uint32_t)(steps / 1000); }
 void hal_dbg(const char *s) { fputs(s, stderr); }
 void hal_beep(void) { }
@@ -213,6 +216,7 @@ int main(int argc, char **argv)
 		FILE *f = fopen(dump_mem, "wb");
 		fwrite(mem, 1, sizeof mem, f);
 		fprintf(f, "%c%c%c", video_vstat, video_cursor & 0xFF, video_cursor >> 8);
+		fwrite(vcol, 1, sizeof vcol, f);
 		fclose(f);
 	}
 	if (save_disks)

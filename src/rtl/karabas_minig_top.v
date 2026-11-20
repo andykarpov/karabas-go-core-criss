@@ -272,8 +272,9 @@ generate
 	end
 endgenerate
 
-wire scr_we, font_we, beep, cpu_run;
-wire [10:0] scr_wa;
+wire scr_we, font_we, col_we, beep, cpu_run;
+wire [10:0] scr_wa, col_wa;
+wire [2:0] col_wd;
 wire [14:0] font_wa;
 wire [7:0] scr_wd, font_wd, vstat, dbg_uart, dbg_state, sd_dbg;
 wire [15:0] cursor, dbg_z80_pc;
@@ -288,6 +289,7 @@ criss_soc soc (
 	.ps2_code(ps2_code), .ps2_wr(ps2_wr & ~ps2_kind),
 	.sd_we(sd_we), .sd_off(sd_off), .sd_wd(sd_wd), .sd_rd(sd_rd),
 	.scr_we(scr_we), .scr_wa(scr_wa), .scr_wd(scr_wd), .font_we(font_we), .font_wa(font_wa), .font_wd(font_wd),
+	.col_we(col_we), .col_wa(col_wa), .col_wd(col_wd),
 	.vstat(vstat), .cursor(cursor), .beep(beep),
 	.dbg_uart(dbg_uart), .cpu_run(cpu_run), .dbg_z80_pc(dbg_z80_pc), .dbg_state(dbg_state),
 	.sdr_a(SDR_A), .sdr_ba(SDR_BA), .sdr_dq_i(SDR_DQ), .sdr_dq_o(sdr_dq_o), .sdr_dq_oe_n(sdr_dq_oe_n),
@@ -315,6 +317,7 @@ criss_video video (
 	.clk_sys(clk_sys),
 	.scr_we(scr_we), .scr_wa(scr_wa), .scr_wd(scr_wd),
 	.font_we(font_we), .font_wa(font_wa), .font_wd(font_wd),
+	.col_we(col_we), .col_wa(col_wa), .col_wd(col_wd),
 	.vstat_i(vstat), .cursor_i(cursor),
 	.clk_pix(clk_pix), .rgb(vid_rgb), .hs(vid_hs), .vs(vid_vs), .de(vid_de)
 );

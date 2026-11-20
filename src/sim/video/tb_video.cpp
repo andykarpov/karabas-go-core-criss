@@ -11,17 +11,19 @@ int main(int argc, char **argv)
 {
 	Verilated::commandArgs(argc, argv);
 	FILE *f = fopen(argv[1], "rb");
-	std::vector<uint8_t> mem(65536 + 3);
+	std::vector<uint8_t> mem(65536 + 3 + 2048);
 	fread(mem.data(), 1, mem.size(), f); fclose(f);
 	f = fopen(argv[2], "rb");
 	std::vector<uint8_t> rom(0x18A00);
 	fread(rom.data(), 1, rom.size(), f); fclose(f);
 	Vcriss_video *t = new Vcriss_video;
 	auto sys = [&]() { t->clk_sys = 0; t->eval(); t->clk_sys = 1; t->eval(); };
-	t->scr_we = 0; t->font_we = 0;
+	t->scr_we = 0; t->font_we = 0; t->col_we = 0;
 	t->vstat_i = argc > 4 ? strtoul(argv[4], 0, 0) : mem[65536];
 	t->cursor_i = mem[65537] | mem[65538] << 8;
 	for (int i = 0; i < 2048; i++) { t->scr_we = 1; t->scr_wa = i; t->scr_wd = mem[0xF800 + i]; sys(); }
+	for (int i = 0; i < 2048; i++) { t->col_we = 1; t->col_wa = i; t->col_wd = mem[65539 + i]; sys(); }
+	t->col_we = 0;
 	for (int i = 0; i < 5 * 5120; i++) { t->font_we = 1; t->font_wa = i; t->font_wd = rom[0x10000 + i]; sys(); }
 	t->scr_we = 0; t->font_we = 0; sys();
 	std::vector<uint8_t> img(640 * 480 * 3);

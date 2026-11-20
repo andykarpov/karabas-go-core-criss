@@ -1,7 +1,7 @@
 {
     "id": "criss",
     "name": "CRISS CP/M",
-    "build": "26112001",
+    "build": "26112002",
     "visible": true,
     "type": "osd",
     "order": 43,
@@ -20,7 +20,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112001",
+            "build": "26112002",
             "bitstream": "karabas_minig.bin"
         }
     },

@@ -29,6 +29,9 @@
      80..ac, 1000..17fc: criss_sd (sd_*)
    0x90000000 + 4 * a  the Z80 RAM byte a (bits 7..0), 64 KB
    0xA0000000 + 4 * i  the font byte i (write only), 32 KB
+   0xB0000000 + 4 * i  the screen copy of the video, byte i (write only; ESC | of CRISS: the screen
+                       without the Z80 RAM)
+   0xC0000000 + 4 * i  the colour of cell i (write only, bits 2..0)
 */
 module criss_soc #(
 	parameter SDRAM_INIT_CLOCKS = 15'd16000,
@@ -64,6 +67,9 @@ module criss_soc #(
 	output reg font_we = 1'b0,
 	output reg [14:0] font_wa = 15'd0,
 	output reg [7:0] font_wd = 8'd0,
+	output reg col_we = 1'b0,
+	output reg [10:0] col_wa = 11'd0,
+	output reg [2:0] col_wd = 3'd0,
 	output reg [7:0] vstat = 8'hC0,
 	output reg [15:0] cursor = 16'hFFFF,
 	output wire beep,
@@ -232,6 +238,9 @@ criss_z80 z80 (
 assign dbg_z80_pc = z_reg[79:64];
 assign dbg_state = { z_frozen, z_hold, z_freeze, ~z_halt_n, own, cpu_reset, sdram_ready };
 
+reg io_ack = 1'b0;                           // an MMIO access answered (the MMIO block)
+wire io_scr = d_req && d_io && d_rgn == 3'b011 && !cpu_reset;
+
 // the helper owns the SRAM while the Z80 is in reset or stopped
 wire h_own = ~z_reset_n | z_frozen;
 
@@ -247,6 +256,11 @@ wire [15:0] h_a = d_adr[15:0];
 always @(posedge clk) begin
 	hm_ack <= 1'b0;
 	scr_we <= 1'b0;
+	if (io_scr && !io_ack && d_we) begin
+		scr_we <= 1'b1;
+		scr_wa <= d_adr[10:0];
+		scr_wd <= d_dat_o[7:0];
+	end
 	if (h_own) begin
 		if (h_mem && !hm_busy && !hm_ack) begin
 			hm_busy <= 1'b1;
@@ -321,11 +335,11 @@ end
 
 reg [31:0] cycles = 32'd0, ms = 32'd0;
 reg [16:0] ms_cnt = 17'd0;
-reg io_ack = 1'b0;
 reg [31:0] io_dat = 32'd0;
 wire [13:0] io_off = { d_adr[11:0], 2'b00 };
 wire io_regs = d_req && d_io && d_rgn == 3'b000 && !cpu_reset;
 wire io_font = d_req && d_io && d_rgn == 3'b010 && !cpu_reset;
+wire io_col = d_req && d_io && d_rgn == 3'b100 && !cpu_reset;
 wire sd_sel = io_off[13:11] == 3'b010 || (io_off[13:8] == 6'd0 && io_off[7] == 1'b1);   // 0x1000.., 0x80..0xfc
 assign sd_we = io_regs && !io_ack && d_we && sd_sel;
 assign sd_off = io_off;
@@ -364,12 +378,20 @@ always @(posedge clk) begin
 			ms_cnt <= ms_cnt + 17'd1;
 	end
 
+	col_we <= 1'b0;
 	if (io_font && !io_ack) begin
 		io_ack <= 1'b1;
 		font_we <= d_we;
 		font_wa <= d_adr[14:0];
 		font_wd <= d_dat_o[7:0];
 	end
+	if (io_col && !io_ack) begin
+		io_ack <= 1'b1;
+		col_we <= d_we;
+		col_wa <= d_adr[10:0];
+		col_wd <= d_dat_o[2:0];
+	end
+	if (io_scr && !io_ack) io_ack <= 1'b1;   // the write itself: the SRAM block (scr_*)
 
 	if (io_regs && !io_ack) begin
 		io_ack <= 1'b1;

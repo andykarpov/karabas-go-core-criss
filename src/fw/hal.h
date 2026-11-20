@@ -32,6 +32,8 @@ const uint8_t *hal_rom(void);
 // video: VSTAT (LINES << 3 | code page, 0 = sleep), cursor offset from F800 (or 0xFFFF = off)
 void hal_video(uint8_t vstat, uint16_t cursor);
 void hal_fonts(const uint8_t *fonts, uint32_t len);   // character generators into the video
+void hal_scr(uint16_t off, uint8_t c);      // the screen of the video only (not the Z80 RAM): ESC |
+void hal_col(uint16_t off, uint8_t colour); // the colour of a cell (0..7: RGB111)
 
 // keyboard: the next PS/2 set 2 byte, -1 if none
 int hal_ps2(void);

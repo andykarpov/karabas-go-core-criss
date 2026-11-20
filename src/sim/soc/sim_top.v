@@ -48,7 +48,7 @@ criss_soc #(.SDRAM_INIT_CLOCKS(15'd100), .Z80_DIV(Z80_DIV)) soc (
 	.ld_kind(2'd0), .ld_active(1'b0), .ld_addr(32'd0), .ld_data(8'd0), .ld_wr(1'b0), .ld_ready(),
 	.ps2_code(ps2_code), .ps2_wr(ps2_wr),
 	.sd_we(sd_we), .sd_off(sd_off), .sd_wd(sd_wd), .sd_rd(sd_rd),
-	.scr_we(), .scr_wa(), .scr_wd(), .font_we(), .font_wa(), .font_wd(), .vstat(vstat), .cursor(cursor), .beep(),
+	.scr_we(), .scr_wa(), .scr_wd(), .font_we(), .font_wa(), .font_wd(), .col_we(), .col_wa(), .col_wd(), .vstat(vstat), .cursor(cursor), .beep(),
 	.dbg_uart(dbg_uart), .cpu_run(), .dbg_z80_pc(dbg_z80_pc), .dbg_state(dbg_state),
 	.sdr_a(sdr_a), .sdr_ba(sdr_ba), .sdr_dq_i(sdr_dq_i), .sdr_dq_o(sdr_dq_o), .sdr_dq_oe_n(sdr_dq_oe_n),
 	.sdr_dqm(sdr_dqm), .sdr_ras_n(sdr_ras_n), .sdr_cas_n(sdr_cas_n), .sdr_we_n(sdr_we_n),
