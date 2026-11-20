@@ -159,6 +159,8 @@ uint8_t hal_rtc_rd(uint8_t a) { IO(R_RTCA) = a; (void)IO(R_RTCD); return (uint8_
 void hal_rtc_wr(uint8_t a, uint8_t v) { IO(R_RTCW) = (uint32_t)a << 8 | v; }
 void hal_bk_request(uint32_t sectors) { IO(R_BKREQ) = sectors; }
 
+uint8_t hal_sw(int item) { return (uint8_t)(IO(item < 4 ? 0x50 : 0x54) >> (8 * (item & 3))); }
+
 uint32_t hal_ms(void) { return IO(R_MS); }
 void hal_dbg(const char *s) { while (*s) IO(R_DBG) = (uint8_t)*s++; }
 void hal_beep(void) { IO(R_BEEP) = 197; }

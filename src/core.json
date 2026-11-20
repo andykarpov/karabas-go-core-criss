@@ -1,7 +1,7 @@
 {
     "id": "criss",
     "name": "CRISS CP/M",
-    "build": "26112004",
+    "build": "26112005",
     "visible": true,
     "type": "osd",
     "order": 43,
@@ -20,7 +20,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112004",
+            "build": "26112005",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -47,6 +47,32 @@
             "slot": 4,
             "extensions": ".nvr",
             "dir": "/criss"
+        },
+        {
+            "type": "S",
+            "name": "Platform",
+            "options": [
+                "CRISS",
+                "R1715 RU",
+                "R1715 EN",
+                "Kaypro",
+                "TRS-80",
+                "Kaypro 8b",
+                "VT100"
+            ],
+            "default": 0,
+            "index": 4
+        },
+        {
+            "type": "S",
+            "name": "Boot",
+            "options": [
+                "CP/M",
+                "Snapshot 1",
+                "Snapshot 2"
+            ],
+            "default": 0,
+            "index": 5
         },
         {
             "type": "-"

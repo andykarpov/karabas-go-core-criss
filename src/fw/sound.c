@@ -71,3 +71,11 @@ int snd_poll(void)
 	done_event = 0;
 	return e;
 }
+
+// ESC m n1 .. nk 04 cmd (con.c): the notes into MPBUF, then the command (as 4.67: ports E0.., D6)
+void con_melody(const uint8_t *notes, int n, uint8_t cmd)
+{
+	for (int i = 0; i < n && i < 16; i++) snd_buf[i] = notes[i];
+	if (n < 16) snd_buf[n] = 0x04;
+	snd_cmd(cmd);
+}

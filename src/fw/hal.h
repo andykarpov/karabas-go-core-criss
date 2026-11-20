@@ -60,6 +60,8 @@ void hal_rtc_wr(uint8_t a, uint8_t v);
 // the backup RAM file (slot 4 of hal_disk_*): ask for it, size in sectors
 void hal_bk_request(uint32_t sectors);
 
+uint8_t hal_sw(int item);       // the value of OSD item index (S items)
+
 uint32_t hal_ms(void);
 void hal_dbg(const char *s);
 void hal_beep(void);

@@ -7,6 +7,7 @@
 #include "clr.h"
 #include "io.h"
 #include "nvram.h"
+#include "rom.h"
 #include <string.h>
 
 #define SCR 0xF800u
@@ -21,6 +22,8 @@ static uint8_t wx1, wy1, wx2, wy2;     // window (wx1 = 0: none)
 static uint8_t sv_x = 1, sv_y = 1, sv_hide;   // ESC B 6 / ESC A
 
 static uint8_t sleeping;
+static uint8_t platform;               // HW_FLAG: 0 CRISS .. 6 VT100
+static uint8_t k_inv;                  // Kaypro: inversion (ESC B 0 / ESC C 0)
 static uint8_t save_buf[2000];         // ESC B S / C S
 static uint8_t esc[24];                // the bytes after ESC
 static uint8_t esc_n, in_esc;
@@ -57,6 +60,7 @@ int con_sysvar(uint8_t o)
 {
 	uint16_t vc = (uint16_t)(off_xy() + 0x100), ve = (uint16_t)(vend + 0x100), tp = (uint16_t)(top + 0x100);
 	switch (o) {
+	case 0: return platform;
 	case 5: return crt;
 	case 6: return x;
 	case 7: return y;
@@ -388,11 +392,13 @@ static void esc_do(uint8_t z80_a)
 		else if (p1 == 'B') { stat = lines; lines--; vend -= chars; }
 		break;
 	case 'B':
+		if ((platform == 3 || platform == 5) && p1 >= '0' && p1 <= '3') { if (p1 == '0') k_inv = 1; break; }
 		if (p1 == '4') cur_hide = 0;
 		else if (p1 == '6') { sv_x = x; sv_y = y; sv_hide = cur_hide; }
 		else if (p1 == 'S') for (int i = 0; i < 2000; i++) save_buf[i] = hal_rd((uint16_t)(SCR + i));
 		break;
 	case 'C':
+		if ((platform == 3 || platform == 5) && p1 >= '0' && p1 <= '3') { if (p1 == '0') k_inv = 0; break; }
 		if (p1 == '4') cur_hide = 0x80;
 		else if (p1 == '6') { x = sv_x; y = sv_y; cur_hide = sv_hide; }
 		else if (p1 == 'S') for (int i = 0; i < 2000; i++) hal_wr((uint16_t)(SCR + i), save_buf[i]);
@@ -427,16 +433,181 @@ static void esc_do(uint8_t z80_a)
 	}
 }
 
+// ------------------------------------------------------------------ platforms (docs/re/cpu-io.md 3, 12.3, 12.4)
+// 0 CRISS, 1 Robotron 1715 RU, 2 Robotron 1715 EN, 3 Kaypro, 4 TRS-80, 5 Kaypro 8 bit, 6 VT100 / ANSI / VT52
+
+static uint8_t r_attr, r_s1;           // Robotron: attribute of the current field, s1 (0x0928 bit 2)
+static uint8_t vt_save_x = 1, vt_save_y = 1;
+static uint8_t i8275, i8275_col;       // OUT 18 / 19 state
+
+uint8_t con_platform(void) { return platform; }
+
+void con_set_platform(uint8_t p)
+{
+	const uint8_t *rec = hal_rom() + ROM_PLATFORMS + 24 * (p > 6 ? 0 : p);
+	platform = p > 6 ? 0 : p;
+	r_attr = r_s1 = 0;
+	k_inv = 0;
+	clear_range(top, vend);
+	cur_hide = 0;
+	home();
+	lines = rec[16]; chars = rec[17]; crt = rec[18] & 0xC7;
+	apply_mode();
+	update();
+}
+
+// a printable character (>= 0x20) of the platform: the byte to print, or -1 (nothing)
+static int plat_char(uint8_t c)
+{
+	switch (platform) {
+	case 1: case 2: {                  // Robotron (0x16F42)
+		if (c < 0x80) {
+			uint8_t a = r_attr ^ r_s1;
+			if (a & 0x04) { if (c == 0x40) c = 0x1F; else if (c >= 0x41 && c <= 0x5F) c -= 0x40; }
+			if (a & 0x10) c |= 0x80;
+			return c;
+		}
+		switch (c) {
+		case 0x82: cur_hide = 0; return -1;
+		case 0x83: cur_hide = 0x80; return -1;
+		case 0x84: r_attr = 0x40; return 0x3A;
+		case 0x85: r_attr = 0x50; return 0x3A;
+		case 0x86: r_attr = 0x41; return 0x3A;
+		case 0x87: r_attr = 0x51; return 0x3A;
+		case 0x90: r_s1 = 0; return -1;
+		case 0x91: r_s1 = 4; return -1;
+		case 0xFF: return 0x7F;
+		default: return 0x20;
+		}
+	}
+	case 3: c &= 0x7F; return k_inv ? (c | 0x80) : c;   // Kaypro (0x1719A)
+	case 4: return c & 0x7F;                            // TRS-80
+	case 6: return c;                                   // VT100
+	default: return c == 0xFF ? 0x7F : c;               // CRISS, Kaypro 8 bit
+	}
+}
+
+// control codes of Kaypro (0x171A8); 1 = done
+static int kaypro_ctrl(uint8_t c)
+{
+	switch (c) {
+	case 0x0C: if (x < chars) x++; return 1;
+	case 0x0B: if (y >= 2) y--; return 1;
+	case 0x17: clear_range(off_xy(), vend); return 1;
+	case 0x18: clear_range(off_xy(), (uint16_t)(y * chars)); return 1;
+	case 0x1A: cls(); return 1;
+	case 0x1E: home(); return 1;
+	default: return 0;
+	}
+}
+
+// Robotron: NumLock (code 0x1E) switches s0 / s1 (CONIN, 0x16D80)
+void con_toggle_s1(void) { r_s1 ^= 4; }
+
+// Robotron ESC: always 3 bytes (0x16FE4 RU, 0x1716A EN)
+static void rob_esc(void)
+{
+	uint8_t a = esc[0], b = esc[1];
+	if (platform == 2 && a == '_' && b >= 0x40 && b <= 0x6B) { r_attr = (uint8_t)(((b - 0x40) >> 2) + 0x10); put(0x3A); return; }
+	if (a == '^') { r_attr = b; put(0x3A); return; }
+	if (a == '_') { put('+'); return; }
+	if (a == 'n') return;
+	pos(a - 0x7F, b - 0x7F);
+}
+
+// VT100 / ANSI / VT52 (0x1729A, 0x172FE, 0x1742A)
+static uint8_t vt_par[4], vt_np, vt_csi, vt_y;
+static void vt_ctrl(uint8_t c)
+{
+	switch (c) {
+	case 0x0A: case 0x0B: case 0x0C: lf(); break;
+	case 0x0D: x = 1; break;
+	case 0x07: hal_beep(); break;
+	case 0x09: case 0x0E: case 0x0F: break;
+	default: put(hal_rom()[ROM_COMPAT_VT + c]); break;
+	}
+}
+
+// a byte of a VT sequence: 1 = the sequence is complete
+static int vt_esc(uint8_t c)
+{
+	if (c == 0x18) return 1;                       // CAN cancels it
+	if (vt_csi) {
+		if (c >= '0' && c <= '9') { vt_par[vt_np] = (uint8_t)(vt_par[vt_np] * 10 + (c - '0')); return 0; }
+		if (c == ';') { if (vt_np < 3) vt_np++; return 0; }
+		int n = vt_par[0] ? vt_par[0] : 1;
+		switch (c) {
+		case 'A': y = (y > n) ? (uint8_t)(y - n) : 1; break;
+		case 'B': y = (y + n < 24) ? (uint8_t)(y + n) : 24; break;
+		case 'C': x = (x + n < 80) ? (uint8_t)(x + n) : 80; break;
+		case 'D': x = (x > n) ? (uint8_t)(x - n) : 1; break;
+		case 'H': case 'f':
+			if (vt_par[0] < 24 && vt_par[1] < 80) { y = vt_par[0] ? vt_par[0] : 1; x = vt_par[1] ? vt_par[1] : 1; }
+			break;
+		case 'K':
+			if (vt_par[0] == 0) clear_range(off_xy(), (uint16_t)(y * chars));
+			else if (vt_par[0] == 1) clear_range((uint16_t)((y - 1) * chars), off_xy() + 1);
+			else clear_range((uint16_t)((y - 1) * chars), (uint16_t)(y * chars));
+			break;
+		case 'J':
+			if (vt_par[0] == 0) clear_range(off_xy(), vend);
+			else if (vt_par[0] == 1) clear_range(top, off_xy() + 1);
+			else clear_range(top, vend);
+			break;
+		default: break;                            // m, q, h, l: ignored
+		}
+		return 1;
+	}
+	if (esc_n == 1) {
+		switch (c) {
+		case '[': vt_csi = 1; vt_np = 0; memset(vt_par, 0, sizeof vt_par); return 0;
+		case 'Y': return 0;
+		case 'A': if (y >= 2) y--; return 1;
+		case 'B': x = 1; return 1;                 // 4.67: CR instead of down (kept)
+		case 'C': if (x < chars) x++; return 1;
+		case 'D': if (x >= 2) x--; return 1;
+		case 'H': home(); return 1;
+		case 'J': clear_range(off_xy(), vend); return 1;
+		case 'K': clear_range(off_xy(), (uint16_t)(y * chars)); return 1;
+		case '7': case 's': vt_save_x = x; vt_save_y = y; return 1;
+		case '8': case 'u': x = vt_save_x; y = vt_save_y; return 1;
+		default: return 1;
+		}
+	}
+	// ESC Y r c
+	if (esc_n == 2) { vt_y = c; return 0; }
+	pos(vt_y - 31, c - 31);
+	return 1;
+}
+
+// OUT 18 / 19: the 8275 of Robotron (0x17096)
+void con_8275(uint8_t port, uint8_t v)
+{
+	if (port == 0x19) { i8275 = v == 0x80 ? 1 : v == 0x00 ? 5 : 0; return; }
+	if (port != 0x18) return;
+	switch (i8275) {
+	case 1: i8275_col = v; i8275 = 2; break;
+	case 2: y = (uint8_t)(v + 1); x = (uint8_t)(i8275_col + 1); i8275 = 0; update(); break;
+	case 5: i8275 = 6; break;
+	case 6: lines = (uint8_t)(v - 0x3F); if (lines < 24 || lines > 25) lines = 24; i8275 = 0; apply_mode(); update(); break;
+	default: break;
+	}
+}
+
 // ESC m n1 .. nk 04 cmd: up to 16 notes to the peripheral MCU (E0..EF), then the command (D6)
-void con_melody(const uint8_t *notes, int n, uint8_t cmd) __attribute__((weak));
-void con_melody(const uint8_t *notes, int n, uint8_t cmd) { (void)notes; (void)n; (void)cmd; }
 
 static uint8_t m_notes[16], m_n, m_end;  // ESC m being collected
 
 void con_out(uint8_t c, uint8_t z80_a)
 {
 	raw_cursor = -1;
-	if (in_esc) {
+	if (in_esc && platform == 6) {
+		esc_n++;
+		if (vt_esc(c)) in_esc = 0;
+	} else if (in_esc && (platform == 1 || platform == 2)) {
+		if (esc_n < sizeof esc) esc[esc_n] = c;
+		if (++esc_n == 2) { in_esc = 0; rob_esc(); }
+	} else if (in_esc) {
 		if (esc_n == 0 && c == 'm') { m_n = 0; m_end = 0; }
 		if (esc_n < sizeof esc) esc[esc_n] = c;
 		esc_n++;
@@ -452,10 +623,14 @@ void con_out(uint8_t c, uint8_t z80_a)
 	} else if (c == 0x1B) {
 		in_esc = 1;
 		esc_n = 0;
+		vt_csi = 0;
 	} else if (c < 0x20) {
-		ctrl(c);
+		if (platform == 6) vt_ctrl(c);
+		else if ((platform == 3 || platform == 5) && kaypro_ctrl(c)) ;
+		else ctrl(c);
 	} else {
-		put(c == 0xFF ? 0x7F : c);
+		int v = plat_char(c);
+		if (v >= 0) put((uint8_t)v);
 	}
 	update();
 }

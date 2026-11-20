@@ -11,6 +11,9 @@
 
 // BIOS state (system variables of the firmware, docs/re/cpu-core.md 8)
 static uint8_t bios_disk, bios_sector, bios_last, bdos_last, last_char;
+static uint8_t cur_platform;
+#define SW_PLATFORM 4      // OSD items read here (core.json index)
+#define SW_BOOT 5
 static uint16_t bios_track, bios_dma;
 
 // one 512-byte sector cache, write-through (firmware 4.67 4.2)
@@ -37,6 +40,8 @@ static void boot(void)
 	con_init();
 	bios_disk = bios_sector = 0; bios_track = 0; bios_dma = 0x80;
 	sec_slot = -1;
+	cur_platform = hal_sw(SW_PLATFORM);
+	if (cur_platform) con_set_platform(cur_platform);
 	hal_freeze(1);
 	hal_z80_reset(0);
 	int code;
@@ -46,6 +51,12 @@ static void boot(void)
 	hal_get_regs(&r);
 	r.pc = 0x0100; r.sp = 0x0100;
 	r.a = 0; r.f = 0; r.bc = 0; r.de = 0;
+	// OSD Boot: a RAM snapshot of the NVRAM image instead of CP/M (as the A / B choice of 4.67)
+	uint8_t b = hal_sw(SW_BOOT);
+	if (b == 1 || b == 2) {
+		z80regs_t s;
+		if (nv_snap_load(b - 1, &s)) r = s;
+	}
 	hal_set_regs(&r);
 	hal_resume();
 }
@@ -74,6 +85,12 @@ static int key_get(z80regs_t *r)
 	if (kbd_d4 == 0x0D) code = 0x80;
 	else if (kbd_d4 == 0x66) code = 0x7F;
 	else if (kbd_d4 == 0x5A) code = 0x9E;
+	uint8_t p = con_platform();
+	if (p == 1) {                                     // Robotron RU (0x16D80)
+		if (c == 0x1E) { con_toggle_s1(); return 0; }
+		if (c >= 0x60 && c <= 0x7E) c -= 0x20;
+		else if (c >= 0x80) c = hal_rom()[ROM_COMPAT_KOI + c - 0x80];
+	} else if (p == 2 && c >= 0x80) return 0;         // Robotron EN: swallowed
 	r->a = c;
 	r->bc = code;
 	r->de = (uint16_t)(code << 8 | 0xE0);
@@ -193,6 +210,9 @@ void bios_state_load(const uint8_t *b)
 
 int criss_idle(void)
 {
+	// OSD Platform changed: the console of the other platform, the screen cleared (as the system console)
+	uint8_t p = hal_sw(SW_PLATFORM);
+	if (p != cur_platform && p <= 6) { cur_platform = p; con_set_platform(p); }
 	kbd_poll();
 	io_poll();
 	nv_poll();

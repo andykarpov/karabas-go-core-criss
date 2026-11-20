@@ -15,7 +15,8 @@
 
  Soft switches (the index of the item in the osd of core.json):
    0 Disk A (F item, slot 0)   1 Disk B (F item, slot 1)   2 NVRAM (F item, slot 4: settings and the RAM
-   snapshots, /criss/criss.nvr)   3 Reset
+   snapshots, /criss/criss.nvr)   3 Reset   4 Platform (CRISS / Robotron RU / EN / Kaypro / TRS-80 / Kaypro 8 bit /
+   VT100)   5 Boot (CP/M / snapshot 1 / snapshot 2); 4 and 5 are read by the helper (MMIO SW)
 */
 
 module karabas_minig_top (
@@ -193,7 +194,7 @@ wire [1:0] ld_kind;
 wire [7:0] ld_slot, ld_data;
 wire [31:0] ld_addr;
 wire ld_start, ld_active, ld_end, ld_wr, ld_ready;
-wire [8*4-1:0] sw;
+wire [8*6-1:0] sw;
 wire [7:0] sdc_img_mounted, sdc_rd, sdc_wr, sdc_byte_in_data, sdc_byte_out_data;
 wire [63:0] sdc_img_size;
 wire [31:0] sdc_sector;
@@ -214,7 +215,7 @@ wire [3:0] osd_py;
 wire [5:0] osd_pw;
 
 kg_mcu2 #(
-	.SW_N(4),
+	.SW_N(6),
 	.CS_FILTER(3),
 	.CAPS(16'h0010),     // bit 4: the core drives LD_READY (settings / snapshots: the NVRAM image, slot 4)
 	.ENABLE_RTC(1),      // the DS1305 of CRISS on the clock of the board (rtc_mode 1)
@@ -313,6 +314,7 @@ criss_soc soc (
 	.ser_tx_data(ser_tx_data), .ser_tx_wr(ser_tx_wr), .ser_tx_full(port_in_full[0]),
 	.rtc_a(rtc_a), .rtc_do(rtc_do), .rtc_di(rtc_di), .rtc_cs(rtc_cs), .rtc_wr_n(rtc_wr_n),
 	.ms_x(ms_x), .ms_y(ms_y), .ms_b(ms_b), .ms_wr(ms_wr),
+	.sw({ 16'd0, sw }),
 	.dbg_uart(dbg_uart), .cpu_run(cpu_run), .dbg_z80_pc(dbg_z80_pc), .dbg_state(dbg_state),
 	.sdr_a(SDR_A), .sdr_ba(SDR_BA), .sdr_dq_i(SDR_DQ), .sdr_dq_o(sdr_dq_o), .sdr_dq_oe_n(sdr_dq_oe_n),
 	.sdr_dqm(SDR_DQM), .sdr_ras_n(SDR_RAS_N), .sdr_cas_n(SDR_CAS_N), .sdr_we_n(SDR_WE_N),

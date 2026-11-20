@@ -2,7 +2,8 @@
 // (superzazu/z80, MIT) with the same traps as criss_z80.v, floppy images as files, keys typed as
 // PS/2 codes when the Z80 waits in CONIN, the text screen printed at the end.
 //   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f] [--bk f]
-// (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the NVRAM image, slot 4)
+// (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the NVRAM image, slot 4; --sw ITEM VALUE: OSD switch,
+//  4 Platform, 5 Boot)
 // (--dump-mem: 64 KB of Z80 RAM + VSTAT + cursor offset, for sim/video)
 #include "../hal.h"
 #include "../rom.h"
@@ -156,6 +157,8 @@ uint8_t hal_rtc_rd(uint8_t a)
 	}
 }
 void hal_rtc_wr(uint8_t a, uint8_t v) { (void)a; (void)v; }
+static uint8_t sw[8];
+uint8_t hal_sw(int item) { return item < 8 ? sw[item] : 0; }
 int hal_disk_read(int slot, uint32_t lba, uint8_t *buf)
 {
 	if (!hal_disk_size(slot) || (lba + 1) * 512 > disk[slot].size) return 1;
@@ -244,6 +247,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--steps") && i + 1 < argc) max_steps = strtoul(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--save")) save_disks = 1;
 		else if (!strcmp(argv[i], "--bk") && i + 1 < argc) bk_name = argv[++i];
+		else if (!strcmp(argv[i], "--sw") && i + 2 < argc) { int k = atoi(argv[++i]); sw[k & 7] = (uint8_t)atoi(argv[++i]); }
 		else if (!strcmp(argv[i], "--dump-mem") && i + 1 < argc) dump_mem = argv[++i];
 		else { fprintf(stderr, "usage: %s --rom f [--disk A:f] [--keys s] [--steps n] [--save]\n", argv[0]); return 2; }
 	}
