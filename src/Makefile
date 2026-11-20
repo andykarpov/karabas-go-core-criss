@@ -6,11 +6,11 @@
 #   make fw               the helper firmware (fw/build/criss_fw.bin)
 #   make nvr              an empty NVRAM image (roms/kg/criss.nvr: settings + two RAM snapshots) for /criss
 #   make clean            the intermediate files
-# The .kg and the data ROM hold files of the CRISS project (no licence): not in git (docs/PLAN.md).
+# The .kg and the data ROM hold files of the CRISS project (licence unknown, README): committed (user 2026-11-20).
 
 ISE_SETTINGS ?= /opt/Xilinx/14.7/ISE_DS/settings64.sh
 PART = xc6slx25-ftg256-2
-BOARDS = minig
+BOARDS = go mini minig
 
 SHELL = /bin/bash
 .SHELLFLAGS = -e -o pipefail -c
@@ -22,6 +22,8 @@ KG = criss.kg
 JSON = core.json
 ROMS = fw/build/criss_fw.bin roms/kg/criss_data.bin
 
+MAP_T_go ?= 2
+MAP_T_mini ?= 2
 MAP_T_minig ?= 2
 MAP = -logic_opt off -ol high -xe n -xt 3 -register_duplication off -r 4 -global_opt off -mt 2 -detail -ir off -pr b -lc auto -power off
 PAR = -ol high -xe c -mt 4
