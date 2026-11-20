@@ -27,6 +27,7 @@ uint8_t io_uart1_count(void);
 uint8_t io_uart1_get(void);
 void io_uart1_put(uint8_t c);
 uint8_t io_rtc_cmd(uint8_t a);
+int io_rs_ready(void);            // a byte waits on RS-232 (IOBYTE channels)
 
 // state of the other parts of the firmware as system variables (-1 / 0: not theirs)
 int con_sysvar(uint8_t o);

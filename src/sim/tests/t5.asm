@@ -41,6 +41,11 @@ start:	ld sp, 0x8000
 1:	ld a, (count) : or a : jr z, 1b
 	di
 	call hex						; 01
+	ld hl, s_clk : call print
+	ld a, 80 : out (0xFE), a				; RTC: time into 65..71
+	ld a, 67 : out (0xF6), a : in a, (0xF7) : call hex	; hours (BCD)
+	ld c, ':' : call conout
+	ld a, 66 : out (0xF6), a : in a, (0xF7) : call hex	; minutes
 	ld hl, s_end : call print
 	ld c, 1 : call 5
 	rst 0
@@ -57,6 +62,7 @@ s_cur:	db 13, 10, "SYS ", 0
 s_fpu:	db 13, 10, "FPU ", 0
 s_tmr:	db 13, 10, "TMR ", 0
 s_int:	db 13, 10, "INT ", 0
+s_clk:	db 13, 10, "CLK ", 0
 s_end:	db 13, 10, "END", 13, 10, 0
 print:	ld a, (hl) : or a : ret z
 	push hl : ld c, a : call conout : pop hl : inc hl : jr print

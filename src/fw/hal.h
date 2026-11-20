@@ -49,6 +49,17 @@ uint32_t hal_disk_size(int slot);
 int hal_disk_read(int slot, uint32_t lba, uint8_t *buf);       // 512 bytes, 0 = ok
 int hal_disk_write(int slot, uint32_t lba, const uint8_t *buf);
 
+// the USB serial port of the board (RS-232 of CRISS)
+int hal_ser_get(void);          // a byte, -1 if none
+int hal_ser_put(uint8_t c);     // 0 = taken, 1 = full
+// mouse: movement since the last call, buttons (bit 0 left, 1 right, 2 middle)
+void hal_mouse(int *dx, int *dy, uint8_t *buttons);
+// the clock of the board: DS1307 registers 00..06 (BCD) of kg_mcu2
+uint8_t hal_rtc_rd(uint8_t a);
+void hal_rtc_wr(uint8_t a, uint8_t v);
+// the backup RAM file (slot 4 of hal_disk_*): ask for it, size in sectors
+void hal_bk_request(uint32_t sectors);
+
 uint32_t hal_ms(void);
 void hal_dbg(const char *s);
 void hal_beep(void);

@@ -22,6 +22,13 @@
 #define R_IODIN  0x2c
 #define R_INT    0x30
 #define R_TONE   0x34
+#define R_SER    0x38
+#define R_SERF   0x3c
+#define R_RTCA   0x60
+#define R_RTCD   0x64
+#define R_RTCW   0x68
+#define R_MOUSE  0x6c
+#define R_BKREQ  0x90
 #define R_REG    0x40
 #define R_SECTOR 0x80
 #define R_CMD    0x84
@@ -113,7 +120,7 @@ int hal_ps2(void)
 	return (v & 0x100) ? (int)(v & 0xFF) : -1;
 }
 
-uint32_t hal_disk_size(int slot) { return slot < 4 ? IO(R_SIZE + 4 * slot) : 0; }
+uint32_t hal_disk_size(int slot) { return slot <= 4 ? IO(R_SIZE + 4 * slot) : 0; }
 
 static int sd_cmd(int slot, uint32_t lba, uint32_t cmd)
 {
@@ -136,6 +143,21 @@ int hal_disk_write(int slot, uint32_t lba, const uint8_t *buf)
 	for (int i = 0; i < 512; i++) SDBUF(i) = buf[i];
 	return sd_cmd(slot, lba, 2);
 }
+
+int hal_ser_get(void) { uint32_t v = IO(R_SER); return (v & 0x100) ? (int)(v & 0xFF) : -1; }
+int hal_ser_put(uint8_t c) { if (IO(R_SERF) & 1) return 1; IO(R_SER) = c; return 0; }
+
+void hal_mouse(int *dx, int *dy, uint8_t *buttons)
+{
+	uint32_t v = IO(R_MOUSE);
+	*dx = (int8_t)(v & 0xFF);
+	*dy = (int8_t)((v >> 8) & 0xFF);
+	*buttons = (uint8_t)(v >> 24);
+}
+
+uint8_t hal_rtc_rd(uint8_t a) { IO(R_RTCA) = a; (void)IO(R_RTCD); return (uint8_t)IO(R_RTCD); }
+void hal_rtc_wr(uint8_t a, uint8_t v) { IO(R_RTCW) = (uint32_t)a << 8 | v; }
+void hal_bk_request(uint32_t sectors) { IO(R_BKREQ) = sectors; }
 
 uint32_t hal_ms(void) { return IO(R_MS); }
 void hal_dbg(const char *s) { while (*s) IO(R_DBG) = (uint8_t)*s++; }

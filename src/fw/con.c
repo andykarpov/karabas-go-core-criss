@@ -6,6 +6,7 @@
 #include "hal.h"
 #include "clr.h"
 #include "io.h"
+#include "nvram.h"
 #include <string.h>
 
 #define SCR 0xF800u
@@ -456,5 +457,27 @@ void con_out(uint8_t c, uint8_t z80_a)
 	} else {
 		put(c == 0xFF ? 0x7F : c);
 	}
+	update();
+}
+
+// the console state for a RAM snapshot (nvram.c)
+void con_state_save(uint8_t *b)
+{
+	uint8_t v[] = { lines, chars, crt, x, y, cur_hide, (uint8_t)vend, (uint8_t)(vend >> 8), (uint8_t)top,
+		(uint8_t)(top >> 8), stat, wx1, wy1, wx2, wy2, sv_x, sv_y, sv_hide };
+	memset(b, 0, CON_STATE_SIZE);
+	memcpy(b, v, sizeof v);
+}
+
+void con_state_load(const uint8_t *b)
+{
+	lines = b[0]; chars = b[1]; crt = b[2]; x = b[3]; y = b[4]; cur_hide = b[5];
+	vend = (uint16_t)(b[6] | b[7] << 8); top = (uint16_t)(b[8] | b[9] << 8); stat = b[10];
+	wx1 = b[11]; wy1 = b[12]; wx2 = b[13]; wy2 = b[14]; sv_x = b[15]; sv_y = b[16]; sv_hide = b[17];
+	if (!chars) chars = 80;
+	if (lines < 23 || lines > 31) lines = 24;
+	in_esc = 0;
+	raw_vstat = raw_cursor = -1;
+	clr_cmd(0x00);
 	update();
 }

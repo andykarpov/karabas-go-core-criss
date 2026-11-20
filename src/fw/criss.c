@@ -6,6 +6,7 @@
 #include "kbd.h"
 #include "io.h"
 #include "sound.h"
+#include "nvram.h"
 #include <string.h>
 
 // BIOS state (system variables of the firmware, docs/re/cpu-core.md 8)
@@ -32,6 +33,7 @@ static void boot(void)
 	kbd_init();
 	io_init();
 	io_reset_req = 0;
+	nv_init();
 	con_init();
 	bios_disk = bios_sector = 0; bios_track = 0; bios_dma = 0x80;
 	sec_slot = -1;
@@ -127,6 +129,17 @@ static void trap(int code)
 	case 0x02: r.a = key_ready() ? 0xFF : 0x00; break;    // CONST
 	case 0x03:                                            // CONIN: no key -> run the trap again
 		if (!key_get(&r)) r.pc -= 2;
+		else if ((kbd_d3 & 0x13) == 0x11 && (kbd_d4 == 0x05 || kbd_d4 == 0x06)) {
+			// Ctrl+Alt+F1: save into snapshot 1, load snapshot 2; F2: the other way round
+			int me = kbd_d4 == 0x05 ? 0 : 1;
+			z80regs_t cur = r;
+			cur.pc -= 2;                                  // back into CONIN
+			if (nv_snap_save(me, &cur)) {
+				z80regs_t other;
+				if (nv_snap_load(1 - me, &other)) r = other;
+				else r.pc -= 2;                           // nothing there: stay, wait again
+			} else r.pc -= 2;
+		}
 		break;
 	case 0x04: con_out(c, r.a); break;                    // CONOUT
 	case 0x05: case 0x06: break;                          // LIST, PUNCH: Ф3
@@ -165,10 +178,24 @@ static void trap(int code)
 	hal_set_regs(&r);
 }
 
+void bios_state_save(uint8_t *b)
+{
+	b[0] = bios_disk; b[1] = bios_sector; b[2] = (uint8_t)bios_track; b[3] = (uint8_t)(bios_track >> 8);
+	b[4] = (uint8_t)bios_dma; b[5] = (uint8_t)(bios_dma >> 8); b[6] = b[7] = 0;
+}
+
+void bios_state_load(const uint8_t *b)
+{
+	bios_disk = b[0]; bios_sector = b[1]; bios_track = (uint16_t)(b[2] | b[3] << 8);
+	bios_dma = (uint16_t)(b[4] | b[5] << 8);
+	sec_slot = -1;
+}
+
 int criss_idle(void)
 {
 	kbd_poll();
 	io_poll();
+	nv_poll();
 	return kbd_reset_req || io_reset_req;
 }
 

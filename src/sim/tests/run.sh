@@ -20,7 +20,12 @@ check t1 'red   green yellow blue' 'inside the window' 'row 7, col 11 (ESC =)' '
 check t2 'screen 80x24 cp 1'
 check t3 'screen 64x30 cp 0' 'row 30: last line'
 check t4 'screen 80x24 cp 7' 'row 3: CP3 Robotron EN'
-check t5 'VER 4304' 'SYS ' '188B' 'FPU 40700000' 'TMR 04' 'INT 01' 'END'
+check t5 'VER 4304' 'SYS ' '188B' 'FPU 40700000' 'TMR 04' 'INT 01' "CLK $(date +%H)" 'END'
+# RAM snapshots: Ctrl+Alt+F1 saves task 1 (DIR), SAVE in task 2, Ctrl+Alt+F2 back to task 1, F1 to task 2
+$SRC/fw/build-host/criss_host --rom $SRC/roms/kg/criss_data.bin --disk A:$W/tst.cpm --bk $W/s.sav \
+	--keys 'DIR T*.*\r\1SAVE 0 Q.COM\r\2' --steps 80000000 > $W/snap1.txt
+grep -q 'SAVE 0' $W/snap1.txt && { echo "snapshot: task 1 not restored"; fail=1; }
+grep -qF 'A: T1       COM' $W/snap1.txt || { echo "snapshot: task 1 screen missing"; fail=1; }
 if [ "$1" = "--png" ]; then
 	for t in t1 t2 t3 t4; do IMG=$W/tst.cpm $SRC/sim/video/run.sh "$2/$t.png" --keys "${t^^}\\r" --steps 30000000 > /dev/null; done
 	echo "frames in $2"

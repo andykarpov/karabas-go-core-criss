@@ -1,12 +1,12 @@
 {
     "id": "criss",
     "name": "CRISS CP/M",
-    "build": "26112002",
+    "build": "26112003",
     "visible": true,
     "type": "osd",
     "order": 43,
     "eeprom_bank": 255,
-    "rtc_mode": 0,
+    "rtc_mode": 1,
     "roms": [
         {
             "filename": "fw/build/criss_fw.bin",
@@ -20,7 +20,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112002",
+            "build": "26112003",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -50,5 +50,6 @@
             "hotkey": "F12",
             "index": 2
         }
-    ]
+    ],
+    "save_dir": "/criss"
 }
