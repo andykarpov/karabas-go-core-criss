@@ -4,6 +4,8 @@ A core of the [CRISS CP/M](https://criss.radio.ru/) DIY computer (КРИСС CP/
 
 Status: work in progress, nothing to run yet. The plan is in `docs/PLAN.md` (Russian).
 
-## Licence
+## Licence and sources
 
-Our files: GPL-3 (`LICENSE`). The CRISS firmware, documents and software belong to their authors and are not part of this repository.
+Our files: GPL-3 (`LICENSE`).
+
+The CRISS CP/M computer, its firmware, documents, schematic, CP/M 2.2 build and software are the work of I. S. Reshetnikov (Игорь Сергеевич Решетников) and the magazine «Радио» (radio.ru), published at https://criss.radio.ru/ and https://www.criss.fun/ (© Radio / Радио / OGSS / НГСС / I. Reshetnikov, 2020-2024). **Their licence is unknown**: no terms are stated on the site. Copies are kept in `upstream/` (fetched by `tools/fetch_upstream.sh`) and the data ROM of the `.kg` holds parts of them (the CP/M 2.2 image `CPM22.bin`, the character generators of the VGA controller firmware, the keyboard and compatibility tables of the CPU / peripheral controller firmware). The core itself is written from scratch; the behaviour of the original firmware was studied by disassembly (`docs/re/`).

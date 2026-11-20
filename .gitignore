@@ -1,6 +1,6 @@
-upstream/
-src/roms/kg/
-*.kg
+upstream/fw/x/
+upstream/dis/
+upstream/extract/
 src/sim/build/
 src/fw/build*/
 src/sim/z80trap/trap_test.bin

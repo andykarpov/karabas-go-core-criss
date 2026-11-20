@@ -8,7 +8,7 @@ A CRISS CP/M core (КРИСС CP/M, I. Reshetnikov, magazine «Радио» 2021
 
 User decisions (2026-11-20): the repo is local for now, public at the first release; ROMs (boot image, character sets) go into the `.kg`, floppy images `.cpm` are files on SD; do NOT write to the author: the port map and undocumented functions come from the firmware disassembly.
 
-Upstream files (firmware, site pages, schematic) have no licence: `tools/fetch_upstream.sh` puts them into `upstream/` (git-ignored, sha256 checked). Never commit them.
+Upstream files (firmware, site pages, schematic) have no licence. User 2026-11-20: they may be committed (the project is open); the README names the source site, the authors and "licence unknown". `upstream/` holds the downloads (`tools/fetch_upstream.sh`, sha256 checked); only the generated parts (`upstream/fw/x`, `dis`, `extract`) are git-ignored. The data ROM and the `.kg` are committed like in the other cores.
 
 ## Rules of the core
 
