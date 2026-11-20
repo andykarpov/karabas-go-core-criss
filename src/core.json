@@ -1,0 +1,54 @@
+{
+    "id": "criss",
+    "name": "CRISS CP/M",
+    "build": "26112001",
+    "visible": true,
+    "type": "osd",
+    "order": 43,
+    "eeprom_bank": 255,
+    "rtc_mode": 0,
+    "roms": [
+        {
+            "filename": "fw/build/criss_fw.bin",
+            "address": 0
+        },
+        {
+            "filename": "roms/kg/criss_data.bin",
+            "address": 1048576
+        }
+    ],
+    "boards": {
+        "minig": {
+            "link": 2,
+            "build": "26112001",
+            "bitstream": "karabas_minig.bin"
+        }
+    },
+    "osd": [
+        {
+            "type": "F",
+            "name": "Disk A",
+            "slot": 0,
+            "extensions": ".cpm",
+            "dir": "/criss",
+            "hotkey": "Menu+F1"
+        },
+        {
+            "type": "F",
+            "name": "Disk B",
+            "slot": 1,
+            "extensions": ".cpm",
+            "dir": "/criss",
+            "hotkey": "Menu+F2"
+        },
+        {
+            "type": "-"
+        },
+        {
+            "type": "T",
+            "name": "Reset",
+            "hotkey": "F12",
+            "index": 2
+        }
+    ]
+}
