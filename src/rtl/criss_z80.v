@@ -16,6 +16,11 @@
  freeze_req (level) stops the CPU the same way at its next M1 without a trap (trap_code 0xFF): the
  boot (PC = SP = 0x0100 through DIR), a stop asked by the helper.
 
+ I/O (Ф3): every I/O cycle (IORQ without M1) is stopped too (trap_code 0xFE): io_port = A, io_wr = an
+ OUT, io_dout = its data; the helper serves the port (for an IN the soc puts its byte on DI while
+ IORQ is low) and resumes; the cycle then completes. An interrupt acknowledge (IORQ with M1) is not
+ stopped.
+
  frozen: the CPU waits on an M1 and the helper may use the memory; it drops with resume, WAIT is
  released REL_CE Z80 clocks later (the memory is the Z80's again for a whole clock first).
 */
@@ -42,6 +47,9 @@ module criss_z80 #(
 	output reg frozen = 1'b0,
 	output reg [7:0] trap_code = 8'hFF,  // the ED opcode of the trap, FF: freeze_req
 	output wire [211:0] reg_q,
+	output reg [15:0] io_port = 16'd0,
+	output reg io_wr = 1'b0,
+	output reg [7:0] io_dout = 8'd0,
 	input wire dir_set,
 	input wire [211:0] dir_d,
 	input wire resume,
@@ -61,6 +69,8 @@ reg wait_on = 1'b0;
 reg [1:0] rel_n = 2'd0;
 reg relq = 1'b0;           // resume taken, WAIT held for REL_CE clocks
 reg ce_seen = 1'b0;        // a Z80 clock went by with WAIT low on this M1 (the CPU is in its wait)
+reg io_done = 1'b0;        // this I/O cycle has been served (until IORQ goes high)
+wire io_cyc = !iorq_n && m1_n;
 
 assign dbg_state = st;
 
@@ -105,6 +115,17 @@ always @(posedge clk) begin
 				(opc == 8'hCB) ? S_C : S_N;
 			endcase
 		end
+		if (iorq_n) io_done <= 1'b0;
+		// stop an I/O cycle
+		if (io_cyc && !io_done && !wait_on) begin
+			wait_on <= 1'b1;
+			ce_seen <= 1'b0;
+			trap_code <= 8'hFE;
+			io_port <= a;
+			io_wr <= !wr_n;
+			io_dout <= dout;
+			io_done <= 1'b1;
+		end
 		// stop on the next M1 (WAIT is sampled by T80 on T2)
 		if (!m1_n && m1_prev && !wait_on && (trap_pend || freeze_req)) begin
 			wait_on <= 1'b1;
@@ -132,7 +153,7 @@ end
 // interrupts closed from the trap opcode (ED seen) to the release
 wire closed = st == S_E || trap_pend || wait_on;
 // WAIT from the first clock of the M1 (T80 samples it on T2, which may be the next clock)
-wire stop_now = !m1_n && m1_prev && (trap_pend || freeze_req);
+wire stop_now = (!m1_n && m1_prev && (trap_pend || freeze_req)) || (io_cyc && !io_done);
 
 T80s #(.Mode(0), .T2Write(1), .IOWait(1)) cpu (
 	.RESET_n(reset_n),

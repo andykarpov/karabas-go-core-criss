@@ -17,7 +17,8 @@
    0x80000000 MMIO (uncached: VexRiscv IO range = bit 31), word registers:
      00 W  DBG: a byte of the debug output (dbg_uart)
      04 W  Z80: bit 0 hold in reset, bit 1 stop at the next M1 (freeze)
-     08 R  Z80 state: bit 0 frozen, bits 15..8 trap code (ED opcode, FF = freeze)
+     08 R  Z80 state: bit 0 frozen, bit 1 the I/O cycle is an OUT, bits 15..8 trap code (ED opcode,
+           FF = freeze, FE = an I/O cycle)
      0c W  RESUME (any value)
      10 W  DIRSET (any value): the registers of DIR0..6 into the Z80
      14 R  MS: milliseconds since reset
@@ -25,6 +26,18 @@
      1c W  VIDEO: bits 7..0 VSTAT, bits 31..16 cursor offset (FFFF off)
      20 W  BEEP: milliseconds of the bell
      24 R  CYCLES: clocks since reset
+     28 R  IO: bits 15..0 the port (A of the I/O cycle), bits 23..16 the data of an OUT
+     2c W  IODIN: the byte an IN reads (held on DI while IORQ is low)
+     34 W  TONE: half period of the melody tone in clocks (0: silence)
+     38 R  SER: bit 8 a byte from the USB serial port of the board (taken by the read), bits 7..0
+           W  a byte to it (dropped when full); 3c R: bit 0 the way to the port is full
+     60 W  RTC_A: address of the RTC RAM of kg_mcu2 (rtc_mode 1: DS1307 registers 00..06, BCD);
+     64 R  RTC_D: its byte;  68 W: { address 15..8, data 7..0 } written into the clock
+     50 R  SW: the OSD switches (kg_mcu2 SW, item i in bits 8i+7..8i, items 0..3)
+     54 R  SW2: items 4..7
+     6c R  MOUSE: bits 31..24 buttons, 15..8 dy sum, 7..0 dx sum (signed, saturated; the read clears)
+     30 W  INT: bit 8 request (level until the Z80 acknowledges it), bits 7..0 the byte of the
+           acknowledge (IM 2 vector / IM 0 opcode); R: bit 8 still pending
      40..58 R REG0..6 (the 212 bits of T80 REG), W DIR0..6
      80..ac, 1000..17fc: criss_sd (sd_*)
    0x90000000 + 4 * a  the Z80 RAM byte a (bits 7..0), 64 KB
@@ -73,6 +86,31 @@ module criss_soc #(
 	output reg [7:0] vstat = 8'hC0,
 	output reg [15:0] cursor = 16'hFFFF,
 	output wire beep,
+	output reg tone = 1'b0,               // the melody tone (square wave)
+
+	// USB serial port of the board (kg_mcu2 port 0)
+	input wire [7:0] ser_rx_data,
+	input wire ser_rx_wr,
+	output wire ser_rx_ready,
+	output reg [7:0] ser_tx_data = 8'd0,
+	output reg ser_tx_wr = 1'b0,
+	input wire ser_tx_full,
+
+	// RTC RAM of kg_mcu2
+	output reg [7:0] rtc_a = 8'd0,
+	input wire [7:0] rtc_do,
+	output reg [7:0] rtc_di = 8'd0,
+	output reg rtc_cs = 1'b0,
+	output reg rtc_wr_n = 1'b1,
+
+	// OSD switches (kg_mcu2 SW)
+	input wire [63:0] sw,
+
+	// mouse (kg_mcu2)
+	input wire [7:0] ms_x,
+	input wire [7:0] ms_y,
+	input wire [7:0] ms_b,
+	input wire ms_wr,
 
 	// debug
 	output reg [7:0] dbg_uart = 8'd0,
@@ -215,6 +253,12 @@ wire [15:0] z_a;
 wire [7:0] z_do;
 reg [7:0] z_di;
 wire z_m1_n, z_mreq_n, z_iorq_n, z_rd_n, z_wr_n, z_halt_n;
+wire [15:0] z_io_port;
+wire z_io_wr;
+wire [7:0] z_io_dout;
+reg [7:0] io_din = 8'hFF;
+reg int_req = 1'b0;
+reg [7:0] int_vec = 8'hFF;
 wire z_reset_n = ~(cpu_reset | z_hold);
 
 reg [4:0] z_div = 5'd0;
@@ -231,8 +275,9 @@ end
 criss_z80 z80 (
 	.clk(clk), .cen(z_cen), .reset_n(z_reset_n),
 	.a(z_a), .di(z_di), .dout(z_do), .m1_n(z_m1_n), .mreq_n(z_mreq_n), .iorq_n(z_iorq_n),
-	.rd_n(z_rd_n), .wr_n(z_wr_n), .halt_n(z_halt_n), .int_n(1'b1), .nmi_n(1'b1),
+	.rd_n(z_rd_n), .wr_n(z_wr_n), .halt_n(z_halt_n), .int_n(~int_req), .nmi_n(1'b1),
 	.freeze_req(z_freeze), .frozen(z_frozen), .trap_code(z_trap), .reg_q(z_reg),
+	.io_port(z_io_port), .io_wr(z_io_wr), .io_dout(z_io_dout),
 	.dir_set(z_dirset), .dir_d(z_dir), .resume(z_resume), .dbg_state()
 );
 assign dbg_z80_pc = z_reg[79:64];
@@ -322,12 +367,13 @@ always @(posedge clk) begin
 end
 
 // the Z80 data: memory (the byte lane of A0) through the IOB flip-flops of MD (the address has been
-// stable for many clocks when T80 takes it on its clock enable), I/O reads FF (Ф3: the ports)
+// stable for many clocks when T80 takes it on its clock enable); an IN: the byte of the helper; an
+// interrupt acknowledge: the byte of INT
 reg [15:0] md_r = 16'd0;
 always @(posedge clk)
 	md_r <= MD_I;
 always @(*) begin
-	if (!z_iorq_n) z_di = 8'hFF;
+	if (!z_iorq_n) z_di = z_m1_n ? io_din : int_vec;
 	else z_di = z_a[0] ? md_r[15:8] : md_r[7:0];
 end
 
@@ -352,12 +398,41 @@ wire kq_empty = kq_w == kq_r;
 
 reg [15:0] beep_ms = 16'd0;
 assign beep = beep_ms != 16'd0;
+// serial: bytes from the port into a 64-byte FIFO
+reg [7:0] sq [0:63];
+reg [5:0] sq_w = 6'd0, sq_r = 6'd0;
+wire sq_empty = sq_w == sq_r;
+assign ser_rx_ready = (sq_w + 6'd1) != sq_r;
+// mouse sums
+reg signed [8:0] ms_dx = 9'sd0, ms_dy = 9'sd0;
+reg [7:0] ms_btn = 8'd0;
+function signed [8:0] sat8(input signed [8:0] a, input [7:0] d);
+	reg signed [9:0] t;
+	begin
+		t = { a[8], a } + { {2{d[7]}}, d };
+		sat8 = (t > 10'sd127) ? 9'sd127 : (t < -10'sd128) ? -9'sd128 : t[8:0];
+	end
+endfunction
+
+reg [19:0] tone_half = 20'd0, tone_cnt = 20'd0;
+always @(posedge clk) begin
+	if (tone_half == 20'd0) begin tone <= 1'b0; tone_cnt <= 20'd0; end
+	else if (tone_cnt >= tone_half) begin tone_cnt <= 20'd1; tone <= ~tone; end
+	else tone_cnt <= tone_cnt + 20'd1;
+end
 
 always @(posedge clk) begin
 	io_ack <= 1'b0;
 	z_resume <= 1'b0;
 	z_dirset <= 1'b0;
 	font_we <= 1'b0;
+	ser_tx_wr <= 1'b0;
+	rtc_cs <= 1'b0;
+	rtc_wr_n <= 1'b1;
+	if (ser_rx_wr && ser_rx_ready) begin sq[sq_w] <= ser_rx_data; sq_w <= sq_w + 6'd1; end
+	if (ms_wr) begin ms_dx <= sat8(ms_dx, ms_x); ms_dy <= sat8(ms_dy, ms_y); ms_btn <= ms_b; end
+	if (!z_iorq_n && !z_m1_n) int_req <= 1'b0;   // acknowledged
+	if (!z_reset_n) int_req <= 1'b0;
 	if (ps2_wr && (kq_w + 4'd1 != kq_r)) begin
 		kq[kq_w] <= ps2_code;
 		kq_w <= kq_w + 4'd1;
@@ -403,6 +478,12 @@ always @(posedge clk) begin
 				8'h10: z_dirset <= 1'b1;
 				8'h1c: begin vstat <= d_dat_o[7:0]; cursor <= d_dat_o[31:16]; end
 				8'h20: beep_ms <= d_dat_o[15:0];
+				8'h2c: io_din <= d_dat_o[7:0];
+				8'h34: tone_half <= d_dat_o[19:0];
+				8'h38: if (!ser_tx_full) begin ser_tx_data <= d_dat_o[7:0]; ser_tx_wr <= 1'b1; end
+				8'h60: rtc_a <= d_dat_o[7:0];
+				8'h68: begin rtc_a <= d_dat_o[15:8]; rtc_di <= d_dat_o[7:0]; rtc_cs <= 1'b1; rtc_wr_n <= 1'b0; end
+				8'h30: begin int_req <= d_dat_o[8]; int_vec <= d_dat_o[7:0]; end
 				8'h40: z_dir[31:0] <= d_dat_o;
 				8'h44: z_dir[63:32] <= d_dat_o;
 				8'h48: z_dir[95:64] <= d_dat_o;
@@ -415,7 +496,22 @@ always @(posedge clk) begin
 		end else if (sd_sel)
 			io_dat <= sd_rd;
 		else case (io_off[7:0])
-			8'h08: io_dat <= { 16'd0, z_trap, 7'd0, z_frozen };
+			8'h08: io_dat <= { 16'd0, z_trap, 6'd0, z_io_wr, z_frozen };
+			8'h28: io_dat <= { 8'd0, z_io_dout, z_io_port };
+			8'h30: io_dat <= { 23'd0, int_req, int_vec };
+			8'h38: begin
+				io_dat <= { 23'd0, ~sq_empty, sq[sq_r] };
+				if (!sq_empty) sq_r <= sq_r + 6'd1;
+			end
+			8'h3c: io_dat <= { 31'd0, ser_tx_full };
+			8'h64: io_dat <= { 24'd0, rtc_do };
+			8'h50: io_dat <= sw[31:0];
+			8'h54: io_dat <= sw[63:32];
+			8'h6c: begin
+				io_dat <= { ms_btn, 8'd0, ms_dy[7:0], ms_dx[7:0] };
+				ms_dx <= ms_wr ? sat8(9'sd0, ms_x) : 9'sd0;
+				ms_dy <= ms_wr ? sat8(9'sd0, ms_y) : 9'sd0;
+			end
 			8'h14: io_dat <= ms;
 			8'h18: begin
 				io_dat <= { 23'd0, ~kq_empty, kq[kq_r] };

@@ -49,6 +49,8 @@ criss_soc #(.SDRAM_INIT_CLOCKS(15'd100), .Z80_DIV(Z80_DIV)) soc (
 	.ps2_code(ps2_code), .ps2_wr(ps2_wr),
 	.sd_we(sd_we), .sd_off(sd_off), .sd_wd(sd_wd), .sd_rd(sd_rd),
 	.scr_we(), .scr_wa(), .scr_wd(), .font_we(), .font_wa(), .font_wd(), .col_we(), .col_wa(), .col_wd(), .vstat(vstat), .cursor(cursor), .beep(),
+	.tone(), .ser_rx_data(8'd0), .ser_rx_wr(1'b0), .ser_rx_ready(), .ser_tx_data(), .ser_tx_wr(), .ser_tx_full(1'b0),
+	.rtc_a(), .rtc_do(8'h00), .rtc_di(), .rtc_cs(), .rtc_wr_n(), .ms_x(8'd0), .ms_y(8'd0), .ms_b(8'd0), .ms_wr(1'b0), .sw(64'd0),
 	.dbg_uart(dbg_uart), .cpu_run(), .dbg_z80_pc(dbg_z80_pc), .dbg_state(dbg_state),
 	.sdr_a(sdr_a), .sdr_ba(sdr_ba), .sdr_dq_i(sdr_dq_i), .sdr_dq_o(sdr_dq_o), .sdr_dq_oe_n(sdr_dq_oe_n),
 	.sdr_dqm(sdr_dqm), .sdr_ras_n(sdr_ras_n), .sdr_cas_n(sdr_cas_n), .sdr_we_n(sdr_we_n),
@@ -60,6 +62,6 @@ criss_sd sd (
 	.sdc_img_mounted(sdc_img_mounted), .sdc_img_size(sdc_img_size), .sdc_rd(sdc_rd), .sdc_wr(sdc_wr),
 	.sdc_sector(sdc_sector), .sdc_busy(sdc_busy), .sdc_done(sdc_done), .sdc_error(sdc_error), .sdc_slot(sdc_slot),
 	.sdc_byte_in_strobe(sdc_byte_in_strobe), .sdc_byte_addr(sdc_byte_addr), .sdc_byte_in_data(sdc_byte_in_data),
-	.sdc_byte_out_data(sdc_byte_out_data), .dbg()
+	.sdc_byte_out_data(sdc_byte_out_data), .img_flush(8'd0), .bk_mount(), .bk_flushed(), .bk_size(), .dbg()
 );
 endmodule

@@ -3,6 +3,7 @@
 #include "kbd.h"
 #include "hal.h"
 #include "rom.h"
+#include "io.h"
 
 // modifiers, the bits of D3: 0 Ctrl, 1 Shift, 2 RUS (ScrollLock), 3 CapsLock, 4 Alt
 static uint8_t mods, e0, rel;
@@ -48,6 +49,7 @@ static void key(uint8_t b)
 	kbd_d3 = mods;
 	kbd_d4 = b;
 	kbd_d5 = c;
+	io_key_event();
 }
 
 void kbd_poll(void)

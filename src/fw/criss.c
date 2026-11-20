@@ -4,10 +4,16 @@
 #include "rom.h"
 #include "con.h"
 #include "kbd.h"
+#include "io.h"
+#include "sound.h"
+#include "nvram.h"
 #include <string.h>
 
 // BIOS state (system variables of the firmware, docs/re/cpu-core.md 8)
-static uint8_t bios_disk, bios_sector, bios_last, bdos_last;
+static uint8_t bios_disk, bios_sector, bios_last, bdos_last, last_char;
+static uint8_t cur_platform;
+#define SW_PLATFORM 4      // OSD items read here (core.json index)
+#define SW_BOOT 5
 static uint16_t bios_track, bios_dma;
 
 // one 512-byte sector cache, write-through (firmware 4.67 4.2)
@@ -28,9 +34,14 @@ static void boot(void)
 	// the key of the reset (F12 of the OSD, Ctrl+Alt+Shift+Esc) may still be queued: not for CP/M
 	while (hal_ps2() >= 0) ;
 	kbd_init();
+	io_init();
+	io_reset_req = 0;
+	nv_init();
 	con_init();
 	bios_disk = bios_sector = 0; bios_track = 0; bios_dma = 0x80;
 	sec_slot = -1;
+	cur_platform = hal_sw(SW_PLATFORM);
+	if (cur_platform) con_set_platform(cur_platform);
 	hal_freeze(1);
 	hal_z80_reset(0);
 	int code;
@@ -40,6 +51,12 @@ static void boot(void)
 	hal_get_regs(&r);
 	r.pc = 0x0100; r.sp = 0x0100;
 	r.a = 0; r.f = 0; r.bc = 0; r.de = 0;
+	// OSD Boot: a RAM snapshot of the NVRAM image instead of CP/M (as the A / B choice of 4.67)
+	uint8_t b = hal_sw(SW_BOOT);
+	if (b == 1 || b == 2) {
+		z80regs_t s;
+		if (nv_snap_load(b - 1, &s)) r = s;
+	}
 	hal_set_regs(&r);
 	hal_resume();
 }
@@ -61,12 +78,19 @@ static int key_get(z80regs_t *r)
 	}
 	if (!kbd_d5) return 0;
 	uint8_t c = kbd_d5;
+	last_char = c;
 	kbd_d5 = 0;
 	// CRISS platform: A = character, B = 0, C = D = code (TAB 80, BS 7F, Enter 9E by scan), E = E0
 	uint8_t code = c;
 	if (kbd_d4 == 0x0D) code = 0x80;
 	else if (kbd_d4 == 0x66) code = 0x7F;
 	else if (kbd_d4 == 0x5A) code = 0x9E;
+	uint8_t p = con_platform();
+	if (p == 1) {                                     // Robotron RU (0x16D80)
+		if (c == 0x1E) { con_toggle_s1(); return 0; }
+		if (c >= 0x60 && c <= 0x7E) c -= 0x20;
+		else if (c >= 0x80) c = hal_rom()[ROM_COMPAT_KOI + c - 0x80];
+	} else if (p == 2 && c >= 0x80) return 0;         // Robotron EN: swallowed
 	r->a = c;
 	r->bc = code;
 	r->de = (uint16_t)(code << 8 | 0xE0);
@@ -122,6 +146,17 @@ static void trap(int code)
 	case 0x02: r.a = key_ready() ? 0xFF : 0x00; break;    // CONST
 	case 0x03:                                            // CONIN: no key -> run the trap again
 		if (!key_get(&r)) r.pc -= 2;
+		else if ((kbd_d3 & 0x13) == 0x11 && (kbd_d4 == 0x05 || kbd_d4 == 0x06)) {
+			// Ctrl+Alt+F1: save into snapshot 1, load snapshot 2; F2: the other way round
+			int me = kbd_d4 == 0x05 ? 0 : 1;
+			z80regs_t cur = r;
+			cur.pc -= 2;                                  // back into CONIN
+			if (nv_snap_save(me, &cur)) {
+				z80regs_t other;
+				if (nv_snap_load(1 - me, &other)) r = other;
+				else r.pc -= 2;                           // nothing there: stay, wait again
+			} else r.pc -= 2;
+		}
 		break;
 	case 0x04: con_out(c, r.a); break;                    // CONOUT
 	case 0x05: case 0x06: break;                          // LIST, PUNCH: Ф3
@@ -160,10 +195,60 @@ static void trap(int code)
 	hal_set_regs(&r);
 }
 
+void bios_state_save(uint8_t *b)
+{
+	b[0] = bios_disk; b[1] = bios_sector; b[2] = (uint8_t)bios_track; b[3] = (uint8_t)(bios_track >> 8);
+	b[4] = (uint8_t)bios_dma; b[5] = (uint8_t)(bios_dma >> 8); b[6] = b[7] = 0;
+}
+
+void bios_state_load(const uint8_t *b)
+{
+	bios_disk = b[0]; bios_sector = b[1]; bios_track = (uint16_t)(b[2] | b[3] << 8);
+	bios_dma = (uint16_t)(b[4] | b[5] << 8);
+	sec_slot = -1;
+}
+
 int criss_idle(void)
 {
+	// OSD Platform changed: the console of the other platform, the screen cleared (as the system console)
+	uint8_t p = hal_sw(SW_PLATFORM);
+	if (p != cur_platform && p <= 6) { cur_platform = p; con_set_platform(p); }
 	kbd_poll();
-	return kbd_reset_req;
+	io_poll();
+	nv_poll();
+	return kbd_reset_req || io_reset_req;
+}
+
+// system variables of the BIOS (docs/re/cpu-core.md 8): -1 = not ours
+int bios_sysvar(uint8_t o)
+{
+	switch (o) {
+	case 15: return bios_disk;
+	case 16: return bios_track >> 8;
+	case 17: return bios_track & 0xFF;
+	case 18: return bios_sector;
+	case 19: return bios_dma >> 8;
+	case 20: return bios_dma & 0xFF;
+	case 22: return last_char;
+	case 23: return kbd_d3;
+	case 24: return kbd_d4;
+	case 46: return bios_last;
+	case 64: return bdos_last;
+	default: return -1;
+	}
+}
+
+void bios_sysvar_set(uint8_t o, uint8_t v)
+{
+	switch (o) {
+	case 15: bios_disk = v; break;
+	case 16: bios_track = (uint16_t)(v << 8 | (bios_track & 0xFF)); break;
+	case 17: bios_track = (uint16_t)((bios_track & 0xFF00) | v); break;
+	case 18: bios_sector = v; break;
+	case 19: bios_dma = (uint16_t)(v << 8 | (bios_dma & 0xFF)); break;
+	case 20: bios_dma = (uint16_t)((bios_dma & 0xFF00) | v); break;
+	default: break;
+	}
 }
 
 void criss_main(void)
@@ -172,8 +257,14 @@ void criss_main(void)
 	for (;;) {
 		int code = hal_wait_trap();
 		if (code == HAL_STOP) return;
-		if (code < 0 || kbd_reset_req) { boot(); continue; }
-		if (code != TRAP_FREEZE) trap(code);
+		if (code < 0 || kbd_reset_req || io_reset_req) { boot(); continue; }
+		if (code == TRAP_IO) {
+			uint16_t port; int wr; uint8_t d;
+			hal_io(&port, &wr, &d);
+			if (wr) io_out(port, d);
+			else hal_io_in(io_in(port));
+		} else if (code != TRAP_FREEZE) trap(code);
+		io_poll();
 		hal_resume();
 	}
 }

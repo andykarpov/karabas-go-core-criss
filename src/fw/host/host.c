@@ -1,7 +1,9 @@
 // The CRISS helper firmware on a PC (docs/PLAN.md Ф1 step 2): the hal on a Z80 interpreter
 // (superzazu/z80, MIT) with the same traps as criss_z80.v, floppy images as files, keys typed as
 // PS/2 codes when the Z80 waits in CONIN, the text screen printed at the end.
-//   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f]
+//   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f] [--bk f]
+// (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the NVRAM image, slot 4; --sw ITEM VALUE: OSD switch,
+//  4 Platform, 5 Boot)
 // (--dump-mem: 64 KB of Z80 RAM + VSTAT + cursor offset, for sim/video)
 #include "../hal.h"
 #include "../rom.h"
@@ -21,7 +23,7 @@ static uint16_t video_cursor;
 static int save_disks;
 static const char *dump_mem;      // write the 64 KB of the Z80 at the end (sim/video test)
 
-static struct { char *name; uint8_t *data; uint32_t size; } disk[4];
+static struct { char *name; uint8_t *data; uint32_t size; } disk[5];   // A..D, 4 = the backup RAM file
 
 // keys: PS/2 codes queued one key (make + break) at a time
 static uint8_t keyq[8192];
@@ -30,8 +32,17 @@ static int key_avail;           // bytes of the current key that may be read
 
 static uint8_t rd(void *u, uint16_t a) { (void)u; return mem[a]; }
 static void wr(void *u, uint16_t a, uint8_t v) { (void)u; mem[a] = v; }
-static uint8_t pin(z80 *z, uint8_t p) { (void)z; (void)p; return 0xFF; }
-static void pout(z80 *z, uint8_t p, uint8_t v) { (void)z; (void)p; (void)v; }
+#include "../io.h"
+static uint8_t pin(z80 *z, uint8_t p) { return io_in((uint16_t)(z->b << 8 | p)); }
+static void pout(z80 *z, uint8_t p, uint8_t v) { io_out((uint16_t)(z->b << 8 | p), v); }
+static int int_req;
+static uint8_t int_vec;
+void hal_io(uint16_t *port, int *wr, uint8_t *data) { *port = 0; *wr = 0; *data = 0; }
+void hal_io_in(uint8_t v) { (void)v; }
+void hal_int(int req, uint8_t vec) { int_req = req; int_vec = vec; }
+int hal_int_pending(void) { return int_req; }
+uint32_t tone_ns;
+void hal_tone(uint32_t ns) { tone_ns = ns; }
 
 static int is_trap(uint8_t b) { return b <= 0x27 || b == 0x77 || b == 0x7F || (b >= 0xA4 && b <= 0xA7); }
 
@@ -60,6 +71,7 @@ int hal_wait_trap(void)
 			if (code == 0x03) conin_polls++; else conin_polls = 0;
 			return code;
 		}
+		if (int_req && cpu.iff1) { z80_gen_int(&cpu, int_vec); int_req = 0; }
 		z80_step(&cpu);
 		steps++;
 		if ((steps & 1023) == 0 && criss_idle()) return -1;
@@ -116,7 +128,37 @@ int hal_ps2(void)
 	return keyq[keyq_rd++];
 }
 
-uint32_t hal_disk_size(int slot) { return slot < 4 && disk[slot].data ? disk[slot].size : 0; }
+uint32_t hal_disk_size(int slot) { return slot < 5 && disk[slot].data ? disk[slot].size : 0; }
+static const char *bk_name;
+void hal_bk_request(uint32_t sectors)
+{
+	// as the firmware of the board: open or make the file with at least the asked size
+	if (!bk_name || disk[4].data) return;
+	uint32_t n = sectors * 512;
+	FILE *f = fopen(bk_name, "rb");
+	disk[4].data = calloc(1, n);
+	disk[4].size = n;
+	disk[4].name = (char *)bk_name;
+	if (f) { size_t r = fread(disk[4].data, 1, n, f); (void)r; fclose(f); }
+}
+int hal_ser_get(void) { return -1; }
+int hal_ser_put(uint8_t c) { fputc(c, stderr); return 0; }
+void hal_mouse(int *dx, int *dy, uint8_t *b) { *dx = *dy = 0; *b = 0; }
+#include <time.h>
+static uint8_t bcd(int v) { return (uint8_t)((v / 10) << 4 | (v % 10)); }
+uint8_t hal_rtc_rd(uint8_t a)
+{
+	time_t t = time(0);
+	struct tm *m = localtime(&t);
+	switch (a) {
+	case 0: return bcd(m->tm_sec); case 1: return bcd(m->tm_min); case 2: return bcd(m->tm_hour);
+	case 3: return (uint8_t)(m->tm_wday + 1); case 4: return bcd(m->tm_mday); case 5: return bcd(m->tm_mon + 1);
+	case 6: return bcd(m->tm_year % 100); default: return 0;
+	}
+}
+void hal_rtc_wr(uint8_t a, uint8_t v) { (void)a; (void)v; }
+static uint8_t sw[8];
+uint8_t hal_sw(int item) { return item < 8 ? sw[item] : 0; }
 int hal_disk_read(int slot, uint32_t lba, uint8_t *buf)
 {
 	if (!hal_disk_size(slot) || (lba + 1) * 512 > disk[slot].size) return 1;
@@ -149,6 +191,13 @@ static void type(const char *s)
 {
 	for (; *s; s++) {
 		uint8_t ch = (uint8_t)*s;
+		if (ch == 1 || ch == 2) {      // Ctrl+Alt+F1 / F2 (--keys \1 / \2)
+			uint8_t f = ch == 1 ? 0x05 : 0x06;
+			uint8_t seq[] = { 0x14, 0x11, f, 0xF0, f, 0xF0, 0x11, 0xF0, 0x14 };
+			memcpy(keyq + keyq_n, seq, sizeof seq);
+			keyq_n += sizeof seq;
+			continue;
+		}
 		int found = 0;
 		for (int sh = 0; sh < 2 && !found; sh++)
 			for (int sc = 1; sc < 0x80 && !found; sc++)
@@ -197,6 +246,8 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--keys") && i + 1 < argc) keys = argv[++i];
 		else if (!strcmp(argv[i], "--steps") && i + 1 < argc) max_steps = strtoul(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--save")) save_disks = 1;
+		else if (!strcmp(argv[i], "--bk") && i + 1 < argc) bk_name = argv[++i];
+		else if (!strcmp(argv[i], "--sw") && i + 2 < argc) { int k = atoi(argv[++i]); sw[k & 7] = (uint8_t)atoi(argv[++i]); }
 		else if (!strcmp(argv[i], "--dump-mem") && i + 1 < argc) dump_mem = argv[++i];
 		else { fprintf(stderr, "usage: %s --rom f [--disk A:f] [--keys s] [--steps n] [--save]\n", argv[0]); return 2; }
 	}
@@ -206,10 +257,12 @@ int main(int argc, char **argv)
 	int n = 0;
 	for (const char *k = keys; *k && n < (int)sizeof buf - 1; k++) {
 		if (k[0] == '\\' && k[1] == 'r') { buf[n++] = '\r'; k++; }
+		else if (k[0] == '\\' && (k[1] == '1' || k[1] == '2')) { buf[n++] = (char)(k[1] - '0'); k++; }
 		else buf[n++] = *k;
 	}
 	buf[n] = 0;
 	type(buf);
+	if (bk_name) hal_bk_request(261);   // the NVRAM image (slot 4), made if missing
 	criss_main();      // returns at the step limit (hal_wait_trap: HAL_STOP)
 	dump();
 	if (dump_mem) {
@@ -220,7 +273,7 @@ int main(int argc, char **argv)
 		fclose(f);
 	}
 	if (save_disks)
-		for (int d = 0; d < 4; d++)
+		for (int d = 0; d < 5; d++)
 			if (disk[d].data) {
 				FILE *f = fopen(disk[d].name, "wb");
 				fwrite(disk[d].data, 1, disk[d].size, f);

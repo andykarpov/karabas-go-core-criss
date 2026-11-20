@@ -1,12 +1,12 @@
 {
     "id": "criss",
     "name": "CRISS CP/M",
-    "build": "26112002",
+    "build": "26112005",
     "visible": true,
     "type": "osd",
     "order": 43,
     "eeprom_bank": 255,
-    "rtc_mode": 0,
+    "rtc_mode": 1,
     "roms": [
         {
             "filename": "fw/build/criss_fw.bin",
@@ -20,7 +20,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112002",
+            "build": "26112005",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -42,13 +42,46 @@
             "hotkey": "Menu+F2"
         },
         {
+            "type": "F",
+            "name": "NVRAM",
+            "slot": 4,
+            "extensions": ".nvr",
+            "dir": "/criss"
+        },
+        {
+            "type": "S",
+            "name": "Platform",
+            "options": [
+                "CRISS",
+                "R1715 RU",
+                "R1715 EN",
+                "Kaypro",
+                "TRS-80",
+                "Kaypro 8b",
+                "VT100"
+            ],
+            "default": 0,
+            "index": 4
+        },
+        {
+            "type": "S",
+            "name": "Boot",
+            "options": [
+                "CP/M",
+                "Snapshot 1",
+                "Snapshot 2"
+            ],
+            "default": 0,
+            "index": 5
+        },
+        {
             "type": "-"
         },
         {
             "type": "T",
             "name": "Reset",
             "hotkey": "F12",
-            "index": 2
+            "index": 3
         }
     ]
 }
