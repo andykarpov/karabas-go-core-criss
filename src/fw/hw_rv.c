@@ -18,6 +18,10 @@
 #define R_PS2    0x18
 #define R_VIDEO  0x1c
 #define R_BEEP   0x20
+#define R_IO     0x28
+#define R_IODIN  0x2c
+#define R_INT    0x30
+#define R_TONE   0x34
 #define R_REG    0x40
 #define R_SECTOR 0x80
 #define R_CMD    0x84
@@ -77,6 +81,18 @@ void hal_set_regs(const z80regs_t *r)
 }
 
 void hal_resume(void) { IO(R_RESUME) = 1; }
+
+void hal_io(uint16_t *port, int *wr, uint8_t *data)
+{
+	uint32_t v = IO(R_IO);
+	*port = (uint16_t)v;
+	*data = (uint8_t)(v >> 16);
+	*wr = (IO(R_ZST) >> 1) & 1;
+}
+void hal_io_in(uint8_t v) { IO(R_IODIN) = v; }
+void hal_int(int req, uint8_t vec) { IO(R_INT) = (req ? 0x100u : 0) | vec; }
+int hal_int_pending(void) { return (IO(R_INT) >> 8) & 1; }
+void hal_tone(uint32_t half_period_ns) { IO(R_TONE) = half_period_ns * 3u / 40u; }   // clocks of 75 MHz
 uint8_t hal_rd(uint16_t a) { return (uint8_t)Z80M(a); }
 void hal_wr(uint16_t a, uint8_t v) { Z80M(a) = v; }
 const uint8_t *hal_rom(void) { return (const uint8_t *)0x10100000u; }

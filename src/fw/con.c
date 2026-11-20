@@ -5,6 +5,7 @@
 #include "con.h"
 #include "hal.h"
 #include "clr.h"
+#include "io.h"
 #include <string.h>
 
 #define SCR 0xF800u
@@ -29,10 +30,64 @@ static uint8_t cp(void) { return crt & 7; }
 static uint8_t fill(void) { return cp() == 1 ? 0x00 : 0x20; }
 static uint16_t off_xy(void) { return (uint16_t)((y - 1) * chars + (x - 1)); }
 
+static int raw_vstat = -1;             // port D0 written by a program (until the next mode change)
+static int raw_cursor = -1;            // ports D1 / D2 (until the next output)
+
 static void update(void)
 {
 	uint8_t vstat = sleeping ? 0 : (uint8_t)((lines + (stat ? 1 : 0)) << 3 | cp());
-	hal_video(vstat, cur_hide ? 0xFFFF : off_xy());
+	if (raw_vstat >= 0) vstat = (uint8_t)raw_vstat;
+	uint16_t cur = cur_hide ? 0xFFFF : off_xy();
+	if (raw_cursor >= 0) cur = (uint16_t)raw_cursor;
+	hal_video(vstat, cur);
+}
+
+void con_raw_vstat(uint8_t v) { raw_vstat = v; update(); }
+
+void con_raw_cursor(uint8_t hi, uint8_t lo)
+{
+	uint16_t a = (uint16_t)((hi & 0x07) << 8 | lo);
+	raw_cursor = ((hi & 0x80) || a < 0x100 || a >= 0x8D0) ? 0xFFFF : a - 0x100;
+	update();
+}
+
+// system variables kept by the console (docs/re/cpu-io.md 4.1, 12.8): -1 = not ours
+int con_sysvar(uint8_t o)
+{
+	uint16_t vc = (uint16_t)(off_xy() + 0x100), ve = (uint16_t)(vend + 0x100), tp = (uint16_t)(top + 0x100);
+	switch (o) {
+	case 5: return crt;
+	case 6: return x;
+	case 7: return y;
+	case 8: return cur_hide;
+	case 9: return lines;
+	case 10: return chars;
+	case 11: return ve & 0xFF;
+	case 12: return ve >> 8;
+	case 13: return vc & 0xFF;
+	case 14: return vc >> 8;
+	case 0x66: return wx1;
+	case 0x67: return wy1;
+	case 0x68: return wx2;
+	case 0x69: return wy2;
+	case 0x6C: return tp & 0xFF;
+	case 0x6D: return tp >> 8;
+	case 0x6E: return stat;
+	default: return -1;
+	}
+}
+
+int con_sysvar_set(uint8_t o, uint8_t v)
+{
+	switch (o) {
+	case 5: crt = v; break;
+	case 6: if (v >= 1 && v <= chars) x = v; break;
+	case 7: if (v >= 1 && v <= 31) y = v; break;
+	case 8: cur_hide = v & 0x80; break;
+	default: return 0;
+	}
+	update();
+	return 1;
 }
 
 static void clr(uint8_t b) { clr_cmd(b); }
@@ -77,6 +132,7 @@ static void put(uint8_t c)
 // the mode change of the firmware (0xEC2C): VSTAT, cursor, VEND, TOP, status line, window, CLR
 static void apply_mode(void)
 {
+	raw_vstat = -1;
 	cur_hide = cp() == 1 ? 0x80 : 0;
 	vend = (uint16_t)(lines * chars);
 	top = 0;
@@ -378,6 +434,7 @@ static uint8_t m_notes[16], m_n, m_end;  // ESC m being collected
 
 void con_out(uint8_t c, uint8_t z80_a)
 {
+	raw_cursor = -1;
 	if (in_esc) {
 		if (esc_n == 0 && c == 'm') { m_n = 0; m_end = 0; }
 		if (esc_n < sizeof esc) esc[esc_n] = c;

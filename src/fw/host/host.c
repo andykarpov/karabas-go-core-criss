@@ -30,8 +30,17 @@ static int key_avail;           // bytes of the current key that may be read
 
 static uint8_t rd(void *u, uint16_t a) { (void)u; return mem[a]; }
 static void wr(void *u, uint16_t a, uint8_t v) { (void)u; mem[a] = v; }
-static uint8_t pin(z80 *z, uint8_t p) { (void)z; (void)p; return 0xFF; }
-static void pout(z80 *z, uint8_t p, uint8_t v) { (void)z; (void)p; (void)v; }
+#include "../io.h"
+static uint8_t pin(z80 *z, uint8_t p) { return io_in((uint16_t)(z->b << 8 | p)); }
+static void pout(z80 *z, uint8_t p, uint8_t v) { io_out((uint16_t)(z->b << 8 | p), v); }
+static int int_req;
+static uint8_t int_vec;
+void hal_io(uint16_t *port, int *wr, uint8_t *data) { *port = 0; *wr = 0; *data = 0; }
+void hal_io_in(uint8_t v) { (void)v; }
+void hal_int(int req, uint8_t vec) { int_req = req; int_vec = vec; }
+int hal_int_pending(void) { return int_req; }
+uint32_t tone_ns;
+void hal_tone(uint32_t ns) { tone_ns = ns; }
 
 static int is_trap(uint8_t b) { return b <= 0x27 || b == 0x77 || b == 0x7F || (b >= 0xA4 && b <= 0xA7); }
 
@@ -60,6 +69,7 @@ int hal_wait_trap(void)
 			if (code == 0x03) conin_polls++; else conin_polls = 0;
 			return code;
 		}
+		if (int_req && cpu.iff1) { z80_gen_int(&cpu, int_vec); int_req = 0; }
 		z80_step(&cpu);
 		steps++;
 		if ((steps & 1023) == 0 && criss_idle()) return -1;

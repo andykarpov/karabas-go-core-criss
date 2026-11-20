@@ -12,6 +12,7 @@ typedef struct {
 
 #define TRAP_FREEZE 0xFF        // the stop asked by hal_freeze(1), not an ED trap
 #define HAL_STOP    (-2)        // hal_wait_trap: end of the run (host tests)
+#define TRAP_IO     0xFE        // an I/O cycle (hal_io)
 
 // the Z80
 void hal_z80_reset(int hold);   // 1: held in reset (the helper owns its memory)
@@ -21,6 +22,11 @@ int hal_wait_trap(void);        // wait until the Z80 stops: the ED opcode or TR
 void hal_get_regs(z80regs_t *r);
 void hal_set_regs(const z80regs_t *r);
 void hal_resume(void);
+void hal_io(uint16_t *port, int *wr, uint8_t *data);   // the stopped I/O cycle (TRAP_IO)
+void hal_io_in(uint8_t v);                            // the byte the IN reads
+void hal_int(int req, uint8_t vec);                   // INT request (until acknowledged), its byte
+int hal_int_pending(void);                            // a request not yet acknowledged
+void hal_tone(uint32_t half_period_ns);               // melody tone: 0 = silence
 
 // the Z80 memory (only while the Z80 is stopped or in reset)
 uint8_t hal_rd(uint16_t a);

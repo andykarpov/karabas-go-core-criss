@@ -272,7 +272,7 @@ generate
 	end
 endgenerate
 
-wire scr_we, font_we, col_we, beep, cpu_run;
+wire scr_we, font_we, col_we, beep, tone, cpu_run;
 wire [10:0] scr_wa, col_wa;
 wire [2:0] col_wd;
 wire [14:0] font_wa;
@@ -290,7 +290,7 @@ criss_soc soc (
 	.sd_we(sd_we), .sd_off(sd_off), .sd_wd(sd_wd), .sd_rd(sd_rd),
 	.scr_we(scr_we), .scr_wa(scr_wa), .scr_wd(scr_wd), .font_we(font_we), .font_wa(font_wa), .font_wd(font_wd),
 	.col_we(col_we), .col_wa(col_wa), .col_wd(col_wd),
-	.vstat(vstat), .cursor(cursor), .beep(beep),
+	.vstat(vstat), .cursor(cursor), .beep(beep), .tone(tone),
 	.dbg_uart(dbg_uart), .cpu_run(cpu_run), .dbg_z80_pc(dbg_z80_pc), .dbg_state(dbg_state),
 	.sdr_a(SDR_A), .sdr_ba(SDR_BA), .sdr_dq_i(SDR_DQ), .sdr_dq_o(sdr_dq_o), .sdr_dq_oe_n(sdr_dq_oe_n),
 	.sdr_dqm(SDR_DQM), .sdr_ras_n(SDR_RAS_N), .sdr_cas_n(SDR_CAS_N), .sdr_we_n(SDR_WE_N),
@@ -337,15 +337,27 @@ kg_l2_osd_overlay osd (
 
 // ------------------------------------------------------------------ audio: the bell, 2 kHz
 
-reg [1:0] beep_s = 2'd0;
+reg [1:0] beep_s = 2'd0, mel_s = 2'd0;
 reg [12:0] tone_cnt = 13'd0;
-reg tone = 1'b0;
+reg tone_2k = 1'b0;
 always @(posedge clk_pix) begin
 	beep_s <= { beep_s[0], beep };
-	if (tone_cnt == 13'd6249) begin tone_cnt <= 13'd0; tone <= ~tone; end
+	mel_s <= { mel_s[0], tone };
+	if (tone_cnt == 13'd6249) begin tone_cnt <= 13'd0; tone_2k <= ~tone_2k; end
 	else tone_cnt <= tone_cnt + 13'd1;
 end
-wire signed [15:0] snd_l = beep_s[1] ? (tone ? 16'sd6000 : -16'sd6000) : 16'sd0;
+// the bell (2 kHz while BEL) and the melody tone of the peripheral MCU
+wire signed [15:0] snd_bell = beep_s[1] ? (tone_2k ? 16'sd6000 : -16'sd6000) : 16'sd0;
+wire signed [15:0] snd_mel = mel_s[1] ? 16'sd6000 : -16'sd6000;
+reg mel_on = 1'b0;
+reg [15:0] mel_idle = 16'd0;
+always @(posedge clk_pix) begin
+	// the melody square wave: silent when it stops toggling (no DC offset)
+	if (mel_s[1] != mel_s[0]) begin mel_idle <= 16'd0; mel_on <= 1'b1; end
+	else if (mel_idle == 16'hFFFF) mel_on <= 1'b0;
+	else mel_idle <= mel_idle + 16'd1;
+end
+wire signed [15:0] snd_l = snd_bell + (mel_on ? snd_mel : 16'sd0);
 wire signed [15:0] snd_r = snd_l;
 
 kg_pcm5102 #(.DIV_BITS(2)) dac (  // bck 3.1 MHz

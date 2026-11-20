@@ -4,10 +4,12 @@
 #include "rom.h"
 #include "con.h"
 #include "kbd.h"
+#include "io.h"
+#include "sound.h"
 #include <string.h>
 
 // BIOS state (system variables of the firmware, docs/re/cpu-core.md 8)
-static uint8_t bios_disk, bios_sector, bios_last, bdos_last;
+static uint8_t bios_disk, bios_sector, bios_last, bdos_last, last_char;
 static uint16_t bios_track, bios_dma;
 
 // one 512-byte sector cache, write-through (firmware 4.67 4.2)
@@ -28,6 +30,8 @@ static void boot(void)
 	// the key of the reset (F12 of the OSD, Ctrl+Alt+Shift+Esc) may still be queued: not for CP/M
 	while (hal_ps2() >= 0) ;
 	kbd_init();
+	io_init();
+	io_reset_req = 0;
 	con_init();
 	bios_disk = bios_sector = 0; bios_track = 0; bios_dma = 0x80;
 	sec_slot = -1;
@@ -61,6 +65,7 @@ static int key_get(z80regs_t *r)
 	}
 	if (!kbd_d5) return 0;
 	uint8_t c = kbd_d5;
+	last_char = c;
 	kbd_d5 = 0;
 	// CRISS platform: A = character, B = 0, C = D = code (TAB 80, BS 7F, Enter 9E by scan), E = E0
 	uint8_t code = c;
@@ -163,7 +168,40 @@ static void trap(int code)
 int criss_idle(void)
 {
 	kbd_poll();
-	return kbd_reset_req;
+	io_poll();
+	return kbd_reset_req || io_reset_req;
+}
+
+// system variables of the BIOS (docs/re/cpu-core.md 8): -1 = not ours
+int bios_sysvar(uint8_t o)
+{
+	switch (o) {
+	case 15: return bios_disk;
+	case 16: return bios_track >> 8;
+	case 17: return bios_track & 0xFF;
+	case 18: return bios_sector;
+	case 19: return bios_dma >> 8;
+	case 20: return bios_dma & 0xFF;
+	case 22: return last_char;
+	case 23: return kbd_d3;
+	case 24: return kbd_d4;
+	case 46: return bios_last;
+	case 64: return bdos_last;
+	default: return -1;
+	}
+}
+
+void bios_sysvar_set(uint8_t o, uint8_t v)
+{
+	switch (o) {
+	case 15: bios_disk = v; break;
+	case 16: bios_track = (uint16_t)(v << 8 | (bios_track & 0xFF)); break;
+	case 17: bios_track = (uint16_t)((bios_track & 0xFF00) | v); break;
+	case 18: bios_sector = v; break;
+	case 19: bios_dma = (uint16_t)(v << 8 | (bios_dma & 0xFF)); break;
+	case 20: bios_dma = (uint16_t)((bios_dma & 0xFF00) | v); break;
+	default: break;
+	}
 }
 
 void criss_main(void)
@@ -172,8 +210,14 @@ void criss_main(void)
 	for (;;) {
 		int code = hal_wait_trap();
 		if (code == HAL_STOP) return;
-		if (code < 0 || kbd_reset_req) { boot(); continue; }
-		if (code != TRAP_FREEZE) trap(code);
+		if (code < 0 || kbd_reset_req || io_reset_req) { boot(); continue; }
+		if (code == TRAP_IO) {
+			uint16_t port; int wr; uint8_t d;
+			hal_io(&port, &wr, &d);
+			if (wr) io_out(port, d);
+			else hal_io_in(io_in(port));
+		} else if (code != TRAP_FREEZE) trap(code);
+		io_poll();
 		hal_resume();
 	}
 }
