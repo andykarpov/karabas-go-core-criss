@@ -6,7 +6,7 @@ B       := build
 ABI     := -march=rv32im -mabi=ilp32
 CFLAGS  := $(ABI) -Os -g -ffunction-sections -fdata-sections -Wall -Wextra -Wno-unused-parameter -I.
 LDFLAGS := $(ABI) -nostartfiles --specs=nano.specs -Wl,--gc-sections -T link.ld
-SRC     := criss.c con.c kbd.c hw_rv.c
+SRC     := criss.c con.c clr.c kbd.c hw_rv.c
 OBJ     := $(addprefix $(B)/,$(SRC:.c=.o)) $(B)/crt0.o
 
 all: $(B)/criss_fw.bin
