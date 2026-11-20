@@ -21,7 +21,12 @@ loop:	ld a, (hl)
 	jr loop
 done:	ld c, 1
 	call 5
-	db 0x1B, 'G', '0'
+	ld c, 0x1B		; back to the text mode: ESC G 0
+	call conout
+	ld c, 'G'
+	call conout
+	ld c, '0'
+	call conout
 	rst 0
 conout:	ld hl, (1)
 	ld de, 9
