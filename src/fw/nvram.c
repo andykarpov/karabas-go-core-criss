@@ -1,6 +1,7 @@
 // The clock (DS1305 of CRISS: FE 80..87, docs/re/cpu-io.md 5.2) on the clock of the board, its 96-byte
 // RAM (the settings) and the two 64 KB RAM snapshots of the 25LC1024 (docs/re/cpu-core.md 5.4) in the
-// backup RAM file of the core (<save_dir>/game.sav, slot NV_SLOT):
+// NVRAM image of the OSD item NVRAM (slot NV_SLOT, /criss/criss.nvr, NV_SECTORS * 512 bytes; make nvr).
+// (The backup RAM file of the board firmware is made only after a file loader load: not for CRISS.)
 //   sector 0             magic, the 96 settings bytes
 //   1 + n * 130 .. +127  snapshot n (0, 1): the Z80 RAM 0000..FFFF
 //   +128, +129           its state: registers, console, BIOS (snap_state_t)
@@ -19,7 +20,8 @@ static int asked, have_file;
 
 void nv_init(void)
 {
-	if (!asked) { hal_bk_request(NV_SECTORS); asked = 1; }
+	(void)asked;
+	have_file = 0;
 }
 
 static int nv_ready(void)

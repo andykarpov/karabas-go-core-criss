@@ -2,7 +2,7 @@
 // (superzazu/z80, MIT) with the same traps as criss_z80.v, floppy images as files, keys typed as
 // PS/2 codes when the Z80 waits in CONIN, the text screen printed at the end.
 //   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f] [--bk f]
-// (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the backup RAM file)
+// (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the NVRAM image, slot 4)
 // (--dump-mem: 64 KB of Z80 RAM + VSTAT + cursor offset, for sim/video)
 #include "../hal.h"
 #include "../rom.h"
@@ -258,6 +258,7 @@ int main(int argc, char **argv)
 	}
 	buf[n] = 0;
 	type(buf);
+	if (bk_name) hal_bk_request(261);   // the NVRAM image (slot 4), made if missing
 	criss_main();      // returns at the step limit (hal_wait_trap: HAL_STOP)
 	dump();
 	if (dump_mem) {

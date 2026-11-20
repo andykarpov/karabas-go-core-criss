@@ -34,7 +34,9 @@ uint8_t io_rs_get(void)
 
 void io_rs_put(uint8_t c)
 {
-	while (hal_ser_put(c)) ;
+	// no reader on the port: the byte is dropped after 50 ms (the Z80 waits in its OUT meanwhile)
+	uint32_t t0 = hal_ms();
+	while (hal_ser_put(c) && hal_ms() - t0 < 50) ;
 	rs_flags |= 0x40;               // TXC
 }
 

@@ -14,7 +14,8 @@
  Audio: the bell (BEL) as a 2 kHz tone on the PCM5102 and HDMI.
 
  Soft switches (the index of the item in the osd of core.json):
-   0 Disk A (F item, slot 0)   1 Disk B (F item, slot 1)   2 Reset
+   0 Disk A (F item, slot 0)   1 Disk B (F item, slot 1)   2 NVRAM (F item, slot 4: settings and the RAM
+   snapshots, /criss/criss.nvr)   3 Reset
 */
 
 module karabas_minig_top (
@@ -192,7 +193,7 @@ wire [1:0] ld_kind;
 wire [7:0] ld_slot, ld_data;
 wire [31:0] ld_addr;
 wire ld_start, ld_active, ld_end, ld_wr, ld_ready;
-wire [8*3-1:0] sw;
+wire [8*4-1:0] sw;
 wire [7:0] sdc_img_mounted, sdc_rd, sdc_wr, sdc_byte_in_data, sdc_byte_out_data;
 wire [63:0] sdc_img_size;
 wire [31:0] sdc_sector;
@@ -213,16 +214,17 @@ wire [3:0] osd_py;
 wire [5:0] osd_pw;
 
 kg_mcu2 #(
-	.SW_N(3),
+	.SW_N(4),
 	.CS_FILTER(3),
-	.CAPS(16'h0012),     // bit 4: the core drives LD_READY, bit 1: backup RAM (settings, RAM snapshots)
+	.CAPS(16'h0010),     // bit 4: the core drives LD_READY (settings / snapshots: the NVRAM image, slot 4)
 	.ENABLE_RTC(1),      // the DS1305 of CRISS on the clock of the board (rtc_mode 1)
 	.ENABLE_OSD(1),
 	.ENABLE_IMG(1),
 	.IMG_OUT_LATENCY(3), // the address register of kg_l2_img + criss_sd (two registers), as core-doom
 	.ENABLE_AUX(1),      // DEBUG_*: the state of the core (AT+KARABAS=debug:1, kg_board.py log)
 	.ENABLE_FT(1),
-	.ENABLE_SD2(1)
+	.ENABLE_SD2(1),
+	.ENABLE_PORTS(4'b0001) // port 0: the USB serial port (RS-232 of CRISS)
 ) mcu (
 	.CLK(clk_sys),
 	.N_RESET(~areset),
@@ -255,7 +257,7 @@ kg_mcu2 #(
 	.SDC_SECTOR(sdc_sector), .SDC_BUSY(sdc_busy), .SDC_DONE(sdc_done), .SDC_ERROR(sdc_error), .SDC_SLOT(sdc_slot),
 	.SDC_BYTE_IN_STROBE(sdc_byte_in_strobe), .SDC_BYTE_ADDR(sdc_byte_addr), .SDC_BYTE_IN_DATA(sdc_byte_in_data),
 	.SDC_BYTE_OUT_DATA(sdc_byte_out_data), .IMG_WP(), .IMG_PHYS_WR(), .IMG_PHYS(), .IMG_FLUSH(img_flush), .FDD_CHNG_WR(), .FDD_CHNG(),
-	.BK_MOUNT(bk_mount), .BK_FLUSHED(bk_flushed), .BK_SLOT(3'd4), .BK_SIZE(bk_size), .BK_KIND(8'd0), .BK_RESULT(8'h01),
+	.BK_MOUNT(1'b0), .BK_FLUSHED(1'b0), .BK_SLOT(3'd0), .BK_SIZE(32'd0), .BK_KIND(8'd0), .BK_RESULT(8'h00),
 	.FDD_CHNG_REQ(1'b0), .FDD_CHNG_DS(2'd0), .IMG_ACTIVE(),
 	.PORT_OUT_DATA(port_out_data), .PORT_OUT_WR(port_out_wr), .PORT_OUT_READY({ 3'b111, ser_rx_ready }),
 	.PORT_IN_DATA({ 24'd0, ser_tx_data }), .PORT_IN_WR({ 3'b000, ser_tx_wr }),
@@ -275,7 +277,7 @@ assign SD_CS_N = sd2_cs_n;
 assign SD_DI = sd2_mosi;
 assign SD_CLK = mcu_sck_ibufg;
 
-wire sw_reset = sw[2*8];
+wire sw_reset = sw[3*8];
 
 // ------------------------------------------------------------------ the SoC
 

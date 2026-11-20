@@ -4,6 +4,7 @@
 #   make minig-report     LUTs, slices, block RAMs and the timing result of the last build
 #   make roms             the data ROM of the .kg from upstream/ (tools/fetch_upstream.sh first)
 #   make fw               the helper firmware (fw/build/criss_fw.bin)
+#   make nvr              an empty NVRAM image (roms/kg/criss.nvr: settings + two RAM snapshots) for /criss
 #   make clean            the intermediate files
 # The .kg and the data ROM hold files of the CRISS project (no licence): not in git (docs/PLAN.md).
 
@@ -27,7 +28,11 @@ PAR = -ol high -xe c -mt 4
 
 INCLUDES = $(wildcard ../modules/rtl/mcu/*.vh)
 
-.PHONY: all clean roms fw $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report)
+nvr:
+	mkdir -p roms/kg
+	python3 -c "open('roms/kg/criss.nvr', 'wb').write(bytes(261 * 512))"
+
+.PHONY: all clean roms fw nvr $(BOARDS) $(BOARDS:=-xst) $(BOARDS:=-impl) $(BOARDS:=-core) $(BOARDS:=-report)
 
 all: $(BOARDS)
 

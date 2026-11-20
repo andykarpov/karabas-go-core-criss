@@ -1,7 +1,7 @@
 {
     "id": "criss",
     "name": "CRISS CP/M",
-    "build": "26112003",
+    "build": "26112004",
     "visible": true,
     "type": "osd",
     "order": 43,
@@ -20,7 +20,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26112003",
+            "build": "26112004",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -42,14 +42,20 @@
             "hotkey": "Menu+F2"
         },
         {
+            "type": "F",
+            "name": "NVRAM",
+            "slot": 4,
+            "extensions": ".nvr",
+            "dir": "/criss"
+        },
+        {
             "type": "-"
         },
         {
             "type": "T",
             "name": "Reset",
             "hotkey": "F12",
-            "index": 2
+            "index": 3
         }
-    ],
-    "save_dir": "/criss"
+    ]
 }
