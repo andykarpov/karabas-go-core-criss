@@ -271,8 +271,8 @@ always @(posedge clk) begin
 				if (hm_cnt == 3'd5) begin hm_busy <= 1'b0; hm_ack <= 1'b1; MD_OE_N <= 16'hFFFF; end
 			end else begin
 				MRD_N <= 2'b00;
-				if (hm_cnt == 3'd3) begin
-					hm_q <= h_a[0] ? MD_I[15:8] : MD_I[7:0];
+				if (hm_cnt == 3'd4) begin
+					hm_q <= h_a[0] ? md_r[15:8] : md_r[7:0];
 					hm_busy <= 1'b0;
 					hm_ack <= 1'b1;
 				end
@@ -307,10 +307,14 @@ always @(posedge clk) begin
 	end
 end
 
-// the Z80 data: memory (the byte lane of A0), I/O reads FF (Ф3: the ports)
+// the Z80 data: memory (the byte lane of A0) through the IOB flip-flops of MD (the address has been
+// stable for many clocks when T80 takes it on its clock enable), I/O reads FF (Ф3: the ports)
+reg [15:0] md_r = 16'd0;
+always @(posedge clk)
+	md_r <= MD_I;
 always @(*) begin
 	if (!z_iorq_n) z_di = 8'hFF;
-	else z_di = z_a[0] ? MD_I[15:8] : MD_I[7:0];
+	else z_di = z_a[0] ? md_r[15:8] : md_r[7:0];
 end
 
 // ------------------------------------------------------------------ MMIO
