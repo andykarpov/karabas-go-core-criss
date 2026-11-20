@@ -25,6 +25,8 @@ static void boot(void)
 	for (uint32_t a = 0; a < 0x10000; a++) hal_wr((uint16_t)a, 0x20);
 	for (uint32_t a = 0; a < len && a < 0xF800; a++) hal_wr((uint16_t)a, rom[ROM_CPM + a]);
 	hal_fonts(rom + ROM_FONTS, ROM_FONT_N * ROM_FONT_SIZE);
+	// the key of the reset (F12 of the OSD, Ctrl+Alt+Shift+Esc) may still be queued: not for CP/M
+	while (hal_ps2() >= 0) ;
 	kbd_init();
 	con_init();
 	bios_disk = bios_sector = 0; bios_track = 0; bios_dma = 0x80;
