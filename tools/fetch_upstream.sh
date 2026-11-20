@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetch the CRISS CP/M upstream files (firmware, docs, schematic) into upstream/.
-# They have no licence: kept out of git (.gitignore), checked by sha256.
+# Licence unknown (README); committed except the unpacked / generated parts; checked by sha256.
 set -eu
 cd "$(dirname "$0")/.."
 B=https://criss.radio.ru
