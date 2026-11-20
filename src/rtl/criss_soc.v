@@ -31,6 +31,9 @@
      34 W  TONE: half period of the melody tone in clocks (0: silence)
      38 R  SER: bit 8 a byte from the USB serial port of the board (taken by the read), bits 7..0
            W  a byte to it (dropped when full); 3c R: bit 0 the way to the port is full
+     70 W  ESP: a byte to the ESP8266 (dropped while busy); R: bit 0 the transmitter is busy, bit 1
+           receive FIFO overflowed (sticky)
+     74 R  ESP_RX: bit 8 a byte from the ESP8266 (taken by the read), bits 7..0
      60 W  RTC_A: address of the RTC RAM of kg_mcu2 (rtc_mode 1: DS1307 registers 00..06, BCD);
      64 R  RTC_D: its byte;  68 W: { address 15..8, data 7..0 } written into the clock
      78 R  SW: the OSD switches (kg_mcu2 SW, item i in bits 8i+7..8i, items 0..3)
@@ -95,6 +98,11 @@ module criss_soc #(
 	output reg [7:0] ser_tx_data = 8'd0,
 	output reg ser_tx_wr = 1'b0,
 	input wire ser_tx_full,
+
+	// the ESP8266 of the board (UART, criss_esp)
+	input wire esp_rxd,
+	output wire esp_txd,
+	output wire esp_cts_n,
 
 	// RTC RAM of kg_mcu2
 	output reg [7:0] rtc_a = 8'd0,
@@ -403,6 +411,16 @@ reg [7:0] sq [0:63];
 reg [5:0] sq_w = 6'd0, sq_r = 6'd0;
 wire sq_empty = sq_w == sq_r;
 assign ser_rx_ready = (sq_w + 6'd1) != sq_r;
+// the ESP8266
+reg esp_tx_wr = 1'b0, esp_rx_rd = 1'b0;
+reg [7:0] esp_tx_d = 8'd0;
+wire esp_tx_busy, esp_rx_valid, esp_rx_over;
+wire [7:0] esp_rx_d;
+criss_esp esp (
+	.clk(clk), .reset(cpu_reset), .rxd(esp_rxd), .txd(esp_txd), .cts_n(esp_cts_n),
+	.tx_data(esp_tx_d), .tx_wr(esp_tx_wr), .tx_busy(esp_tx_busy),
+	.rx_data(esp_rx_d), .rx_valid(esp_rx_valid), .rx_rd(esp_rx_rd), .rx_over(esp_rx_over)
+);
 // mouse sums
 reg signed [8:0] ms_dx = 9'sd0, ms_dy = 9'sd0;
 reg [7:0] ms_btn = 8'd0;
@@ -427,6 +445,8 @@ always @(posedge clk) begin
 	z_dirset <= 1'b0;
 	font_we <= 1'b0;
 	ser_tx_wr <= 1'b0;
+	esp_tx_wr <= 1'b0;
+	esp_rx_rd <= 1'b0;
 	rtc_cs <= 1'b0;
 	rtc_wr_n <= 1'b1;
 	if (ser_rx_wr && ser_rx_ready) begin sq[sq_w] <= ser_rx_data; sq_w <= sq_w + 6'd1; end
@@ -481,6 +501,7 @@ always @(posedge clk) begin
 				8'h2c: io_din <= d_dat_o[7:0];
 				8'h34: tone_half <= d_dat_o[19:0];
 				8'h38: if (!ser_tx_full) begin ser_tx_data <= d_dat_o[7:0]; ser_tx_wr <= 1'b1; end
+				8'h70: if (!esp_tx_busy) begin esp_tx_d <= d_dat_o[7:0]; esp_tx_wr <= 1'b1; end
 				8'h60: rtc_a <= d_dat_o[7:0];
 				8'h68: begin rtc_a <= d_dat_o[15:8]; rtc_di <= d_dat_o[7:0]; rtc_cs <= 1'b1; rtc_wr_n <= 1'b0; end
 				8'h30: begin int_req <= d_dat_o[8]; int_vec <= d_dat_o[7:0]; end
@@ -505,6 +526,11 @@ always @(posedge clk) begin
 			end
 			8'h3c: io_dat <= { 31'd0, ser_tx_full };
 			8'h64: io_dat <= { 24'd0, rtc_do };
+			8'h70: io_dat <= { 30'd0, esp_rx_over, esp_tx_busy | esp_tx_wr };
+			8'h74: begin
+				io_dat <= { 23'd0, esp_rx_valid, esp_rx_d };
+				esp_rx_rd <= esp_rx_valid;
+			end
 			8'h78: io_dat <= sw[31:0];
 			8'h7c: io_dat <= sw[63:32];
 			8'h6c: begin

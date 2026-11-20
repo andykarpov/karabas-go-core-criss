@@ -28,6 +28,20 @@ for p in "0 CRISS AT" "1 ROBOTRON AT" "3 KAYPRO AT" "6 VT100 AT"; do
 		--keys 'T9\r' --steps 30000000 > $W/p.txt
 	sed -n '6p' $W/p.txt | grep -q "^|         ${p#* }" || { echo "platform ${p%% *}: '${p#* }' not at 5,10"; sed -n '2,8p' $W/p.txt; fail=1; }
 done
+# Ф4 network: t11 on the made-up ESP8266 (host --esp, 127.0.0.2) against netpeer.py (127.0.0.1)
+/opt/sjasmplus/sjasmplus --nologo --msg=err --outprefix=$W/ t11.asm
+python3 -I $SRC/tools/cpmimg.py new $W/net.cpm
+python3 -I $SRC/tools/cpmimg.py add $W/net.cpm $W/t11.com > /dev/null
+python3 -I $SRC/tools/nvrset.py $W/net.nvr --new con=127.0.0.1:47002 > /dev/null
+python3 -I netpeer.py 20 > $W/peer.txt & PEER=$!
+sleep 0.3
+$SRC/fw/build-host/criss_host --rom $SRC/roms/kg/criss_data.bin --disk A:$W/net.cpm --bk $W/net.nvr --esp \
+	--keys 'T11\r' --steps 60000000 > $W/t11.txt
+wait $PEER
+for s in 'LAN UP 7F000002' 'UDP E:HELLO' 'PING 8B' 'ARP 8202007F000001' 'GOT Z' 'END'; do
+	grep -qF -- "$s" $W/t11.txt || { echo "t11: MISSING '$s'"; fail=1; }
+done
+grep -qF "console b'\r\nLAN>'" $W/peer.txt || { echo "t11: console server got:"; cat $W/peer.txt; fail=1; }
 # RAM snapshots: Ctrl+Alt+F1 saves task 1 (DIR), SAVE in task 2, Ctrl+Alt+F2 back to task 1, F1 to task 2
 $SRC/fw/build-host/criss_host --rom $SRC/roms/kg/criss_data.bin --disk A:$W/tst.cpm --bk $W/s.sav \
 	--keys 'DIR T*.*\r\1SAVE 0 Q.COM\r\2' --steps 80000000 > $W/snap1.txt

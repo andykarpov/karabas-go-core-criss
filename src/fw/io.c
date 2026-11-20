@@ -6,6 +6,7 @@
 #include "con.h"
 #include "kbd.h"
 #include "sound.h"
+#include "net.h"
 #include <string.h>
 
 // peripheral MCU registers: index = port - 0xD0
@@ -16,7 +17,7 @@ static uint32_t de_ms;            // the 10 ms timer of DE
 
 // banks F4..FD: address registers, the memories
 static uint8_t bank_addr[5];      // F4, F6, F8, FA, FC
-static uint8_t bank_f4[19], bank_f8[36], bank_fa[57], bank_fc[134];
+static uint8_t bank_f4[19], bank_f8[36], bank_fc[134];   // FA: net_bank (net.c)
 static uint8_t sysvar[256];       // F6 / F7: the plain variables (the others from the firmware state)
 
 // FE / FF
@@ -88,6 +89,7 @@ void io_poll(void)
 		if (kvu[0x0E]) { if (--kvu[0x0E] == 0) kvu_event(0x04); }
 	}
 	if (snd_poll()) kvu_event(0x08);
+	net_poll();
 	int_update();
 }
 
@@ -99,6 +101,7 @@ static uint8_t sv_rd(uint8_t o)
 	if (v >= 0) return (uint8_t)v;
 	v = bios_sysvar(o);
 	if (v >= 0) return (uint8_t)v;
+	if (o == 2) return (uint8_t)(sysvar[2] | (net_on() ? 0x20 : 0));   // HW_FOUND bit 5: LAN
 	return sysvar[o];
 }
 
@@ -117,9 +120,10 @@ void io_sysvar_set(uint8_t o, uint8_t v) { sv_wr(o, v); }
 static void fe_cmd(uint8_t a)
 {
 	if (a == 1) { fe_res = sysvar[21]; for (int i = 0; i < 16; i++) sysvar[26 + i] = (uint8_t)(i + 1); }
+	else if (a >= 48 && a <= 79) fe_res = net_cmd(a);
 	else if (a >= 80 && a <= 95) fe_res = io_rtc_cmd(a);
 	else if (a >= 96) ;                       // nothing, the result stays
-	else fe_res = 0xFF;                       // SPI, CAN, Ethernet (Ф4): no device
+	else fe_res = 0xFF;                       // SPI, CAN: no device
 }
 
 static float flt(int o) { float f; uint8_t b[4]; for (int i = 0; i < 4; i++) b[i] = sysvar[o + i]; memcpy(&f, b, 4); return f; }
@@ -169,7 +173,7 @@ static uint8_t *bank_mem(int b, int *len)
 	switch (b) {
 	case 0: *len = sizeof bank_f4; return bank_f4;
 	case 2: *len = sizeof bank_f8; return bank_f8;
-	case 3: *len = sizeof bank_fa; return bank_fa;
+	case 3: *len = sizeof net_bank; return net_bank;
 	case 4: *len = sizeof bank_fc; return bank_fc;
 	default: *len = 254; return 0;
 	}

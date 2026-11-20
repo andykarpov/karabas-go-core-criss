@@ -7,6 +7,7 @@
 #include "io.h"
 #include "sound.h"
 #include "nvram.h"
+#include "net.h"
 #include <string.h>
 
 // BIOS state (system variables of the firmware, docs/re/cpu-core.md 8)
@@ -35,6 +36,7 @@ static void boot(void)
 	while (hal_ps2() >= 0) ;
 	kbd_init();
 	io_init();
+	net_init();
 	io_reset_req = 0;
 	nv_init();
 	con_init();
@@ -62,14 +64,19 @@ static void boot(void)
 }
 
 // a key for CONIN / CONST: the ESC k queue first, then the keyboard (D5)
+// CON_IOBYTE bit 6: the console server over the network fills the queue (FE 66 of 4.67)
+static void lan_in(void) { if (io_sysvar(1) & 0x40) net_in_poll(); }
+
 static int key_ready(void)
 {
+	lan_in();
 	kbd_poll();
 	return con_fifo_n || kbd_d5;
 }
 
 static int key_get(z80regs_t *r)
 {
+	lan_in();
 	kbd_poll();
 	if (con_fifo_n) {
 		r->a = con_fifo[0];
@@ -158,9 +165,20 @@ static void trap(int code)
 			} else r.pc -= 2;
 		}
 		break;
-	case 0x04: con_out(c, r.a); break;                    // CONOUT
-	case 0x05: case 0x06: break;                          // LIST, PUNCH: Ф3
-	case 0x07: r.a = 0; break;                            // READER: no data
+	case 0x04: {                                          // CONOUT: each bit of CON_IOBYTE (0xE5C2)
+		uint8_t iob = io_sysvar(1);
+		if (iob & 0x04) net_con_out(c);
+		if (iob & 0x01) con_out(c, r.a);
+		break;
+	}
+	case 0x05: if (io_sysvar(88) & 0x04) net_list_out(c); break;    // LIST (0xE644): LAN
+	case 0x06: if (io_sysvar(72) & 0x04) net_punch_out(c); break;   // PUNCH (0xE660): LAN
+	case 0x07: {                                          // READER (0xE67C): never waits, 0 = nothing
+		if (io_sysvar(72) & 0x40) net_in_poll();
+		int v = net_reader_get();
+		r.a = v < 0 ? 0 : (uint8_t)v;
+		break;
+	}
 	case 0x09: bios_disk = c; r.a = c; r.hl = (uint16_t)(0xDEA0 + 16 * c); break;   // SELDSK
 	case 0x0A: bios_track = r.bc; break;                  // SETTRK
 	case 0x0B: bios_sector = c; r.a = c; break;           // SETSEC

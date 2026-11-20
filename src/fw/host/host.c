@@ -3,7 +3,7 @@
 // PS/2 codes when the Z80 waits in CONIN, the text screen printed at the end.
 //   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f] [--bk f]
 // (--keys: \r Enter, \1 / \2 Ctrl+Alt+F1 / F2; --bk: the NVRAM image, slot 4; --sw ITEM VALUE: OSD switch,
-//  4 Platform, 5 Boot)
+//  4 Platform, 5 Boot; --esp: a made-up ESP8266 on UDP sockets of 127.0.0.2, esp_fake.c)
 // (--dump-mem: 64 KB of Z80 RAM + VSTAT + cursor offset, for sim/video)
 #include "../hal.h"
 #include "../rom.h"
@@ -141,6 +141,7 @@ void hal_bk_request(uint32_t sectors)
 	disk[4].name = (char *)bk_name;
 	if (f) { size_t r = fread(disk[4].data, 1, n, f); (void)r; fclose(f); }
 }
+#include "esp_fake.c"
 int hal_ser_get(void) { return -1; }
 int hal_ser_put(uint8_t c) { fputc(c, stderr); return 0; }
 void hal_mouse(int *dx, int *dy, uint8_t *b) { *dx = *dy = 0; *b = 0; }
@@ -249,6 +250,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--bk") && i + 1 < argc) bk_name = argv[++i];
 		else if (!strcmp(argv[i], "--sw") && i + 2 < argc) { int k = atoi(argv[++i]); sw[k & 7] = (uint8_t)atoi(argv[++i]); }
 		else if (!strcmp(argv[i], "--dump-mem") && i + 1 < argc) dump_mem = argv[++i];
+		else if (!strcmp(argv[i], "--esp")) esp_fake_start();
 		else { fprintf(stderr, "usage: %s --rom f [--disk A:f] [--keys s] [--steps n] [--save]\n", argv[0]); return 2; }
 	}
 	if (!rom) { fprintf(stderr, "--rom needed\n"); return 2; }
