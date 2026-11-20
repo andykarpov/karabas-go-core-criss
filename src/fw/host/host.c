@@ -1,7 +1,8 @@
 // The CRISS helper firmware on a PC (docs/PLAN.md Ф1 step 2): the hal on a Z80 interpreter
 // (superzazu/z80, MIT) with the same traps as criss_z80.v, floppy images as files, keys typed as
 // PS/2 codes when the Z80 waits in CONIN, the text screen printed at the end.
-//   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save]
+//   criss_host --rom criss_data.bin [--disk A:img.cpm] [--keys "DIR\r"] [--steps N] [--save] [--dump-mem f]
+// (--dump-mem: 64 KB of Z80 RAM + VSTAT + cursor offset, for sim/video)
 #include "../hal.h"
 #include "../rom.h"
 #include "z80/z80.c"
@@ -18,6 +19,7 @@ static int conin_polls;
 static uint8_t video_vstat = 0xC0;
 static uint16_t video_cursor;
 static int save_disks;
+static const char *dump_mem;      // write the 64 KB of the Z80 at the end (sim/video test)
 
 static struct { char *name; uint8_t *data; uint32_t size; } disk[4];
 
@@ -192,6 +194,7 @@ int main(int argc, char **argv)
 		else if (!strcmp(argv[i], "--keys") && i + 1 < argc) keys = argv[++i];
 		else if (!strcmp(argv[i], "--steps") && i + 1 < argc) max_steps = strtoul(argv[++i], 0, 0);
 		else if (!strcmp(argv[i], "--save")) save_disks = 1;
+		else if (!strcmp(argv[i], "--dump-mem") && i + 1 < argc) dump_mem = argv[++i];
 		else { fprintf(stderr, "usage: %s --rom f [--disk A:f] [--keys s] [--steps n] [--save]\n", argv[0]); return 2; }
 	}
 	if (!rom) { fprintf(stderr, "--rom needed\n"); return 2; }
@@ -206,6 +209,12 @@ int main(int argc, char **argv)
 	type(buf);
 	criss_main();      // returns at the step limit (hal_wait_trap: HAL_STOP)
 	dump();
+	if (dump_mem) {
+		FILE *f = fopen(dump_mem, "wb");
+		fwrite(mem, 1, sizeof mem, f);
+		fprintf(f, "%c%c%c", video_vstat, video_cursor & 0xFF, video_cursor >> 8);
+		fclose(f);
+	}
 	if (save_disks)
 		for (int d = 0; d < 4; d++)
 			if (disk[d].data) {

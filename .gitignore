@@ -5,3 +5,4 @@ src/sim/build/
 src/fw/build*/
 src/sim/z80trap/trap_test.bin
 src/sim/z80trap/trap_test.lst
+src/sim/build/

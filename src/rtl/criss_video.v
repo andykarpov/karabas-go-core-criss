@@ -118,18 +118,19 @@ always @(posedge clk_pix) begin
 end
 
 // ------------------------------------------------------------------ fetch pipeline
-// column c (pixels x0 + 8c ..) : the screen address at hc = x0 + 8c - 8 (stage 0), its byte one
-// clock later (stage 1), the font address (stage 2), the font byte (stage 3), kept in next (stage 4);
-// the shift register takes next at hc = x0 + 8c - 1, so its bit 7 is pixel x0 + 8c on the output.
+// The output runs 8 clocks behind hc (hd = hc - 8), so all fetches of a line are inside it.
+// column c (pixels x0 + 8c ..) : the screen address at hc = x0 + 8c (stage 0), its byte one clock
+// later (stage 1), the font address (stage 2), the font byte (stage 3), kept in next (stage 4); the
+// shift register takes next at hc = x0 + 8c + 7, so its bit 7 is pixel hd = x0 + 8c on the output.
 
 wire wide = chars == 7'd80;
 wire [9:0] x0 = wide ? 10'd0 : 10'd64;
 wire [9:0] xw = wide ? 10'd640 : 10'd512;
-wire [9:0] hf = hc + 10'd8 - x0;          // fetch position: column = hf >> 3
-wire [9:0] hl = hc + 10'd1 - x0;          // load position
+wire [9:0] hf = hc - x0;                  // fetch position: column = hf >> 3
+wire [9:0] hl = hc - 10'd7 - x0;          // load position
 wire vis_line = vc < 10'd480 && vtext;
-wire fetch0 = (hc + 10'd8 >= x0) && (hf < xw) && hf[2:0] == 3'd0 && vis_line;
-wire load = (hc + 10'd1 >= x0) && (hl < xw) && hl[2:0] == 3'd0 && vis_line;
+wire fetch0 = hc >= x0 && hf < xw && hf[2:0] == 3'd0 && vis_line;
+wire load = hc >= x0 + 10'd7 && hl < xw && hl[2:0] == 3'd0 && vis_line;
 
 // the page of the row: CP0..4 -> font * 20, 5 / 6 -> CP0 / CP4 + 2, 7 -> per row
 reg [2:0] cp_row;
@@ -171,10 +172,11 @@ end
 
 // ------------------------------------------------------------------ output (one clock after sh)
 
+wire [9:0] hd = (hc >= 10'd8) ? hc - 10'd8 : hc + 10'd792;
 always @(posedge clk_pix) begin
-	hs <= hc >= 10'd656 && hc < 10'd752;
+	hs <= hd >= 10'd656 && hd < 10'd752;
 	vs <= vc >= 10'd490 && vc < 10'd492;
-	de <= hc < 10'd640 && vc < 10'd480;
+	de <= hd < 10'd640 && vc < 10'd480;
 	rgb <= (!sleep && sh[7]) ? 24'h00FF00 : 24'h000000;
 end
 
