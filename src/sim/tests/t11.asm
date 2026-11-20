@@ -1,6 +1,13 @@
 ; Ф4 network test (fw/net.c through the ESP8266, on the PC: host --esp + netpeer.py): LAN up, UDP to
 ; 127.0.0.1:47000 and its echo (FE 69 / 66 / 67), ping (70 / 54 / 55 / 64), ARP (68 / 54 / 55 / 64),
 ; the console over UDP (CON_IOBYTE bits 2 and 6, server 127.0.0.1:47002 of the NVRAM image).
+; The peer: sjasmplus -DP1=192 -DP2=168 -DP3=1 -DP4=120 (the board against a PC), 127.0.0.1 if not given.
+	ifndef P1
+P1 = 127
+P2 = 0
+P3 = 0
+P4 = 1
+	endif
 	device NOSLOT64K
 	org 0x100
 start:	ld sp, 0x8000
@@ -12,9 +19,9 @@ up:	ld hl, s_up : call print
 	ld a, 10 : out (0xFA), a				; IP_MY
 	ld b, 4
 1:	push bc : in a, (0xFB) : call hex : pop bc : djnz 1b
-	; IP_REMOTE 127.0.0.1, PORT_MY 47001, PORT_REMOTE 47000
+	; IP_REMOTE = the peer, PORT_MY 47001, PORT_REMOTE 47000
 	ld a, 14 : out (0xFA), a
-	ld a, 127 : out (0xFB), a : xor a : out (0xFB), a : out (0xFB), a : inc a : out (0xFB), a
+	ld a, P1 : out (0xFB), a : ld a, P2 : out (0xFB), a : ld a, P3 : out (0xFB), a : ld a, P4 : out (0xFB), a
 	ld a, 37 : out (0xFA), a
 	ld hl, 47001 : call bank16 : ld hl, 47000 : call bank16
 	ld a, 6 : out (0xFA), a					; MBUF_OUT, MBUF_OUT_L
@@ -31,12 +38,12 @@ udp:	ld a, 42 : out (0xFA), a : xor a : out (0xFB), a	; MAIN_RQST = 0
 	ld a, 4 : out (0xFA), a : in a, (0xFB) : ld b, a	; MBUF_IN_L
 	ld hl, buf : ld e, b : ld d, 0 : add hl, de : ld (hl), 0
 	ld hl, s_udp : call print : ld hl, buf : call print
-	; ping 127.0.0.1
+	; ping the peer
 	ld a, 6 : out (0xFA), a : ld hl, msg : call bank16 : ld hl, 5 : call bank16
 	ld a, 70 : out (0xFE), a : ld a, 54 : out (0xFE), a
 	call w_frame : jr c, t_out
 	ld hl, s_ping : call print : ld a, 64 : out (0xFE), a : in a, (0xFE) : call hex
-	; ARP for 127.0.0.1
+	; ARP for the peer
 	ld a, 68 : out (0xFE), a : ld a, 54 : out (0xFE), a
 	call w_frame : jr c, t_out
 	ld hl, s_arp : call print : ld a, 64 : out (0xFE), a : in a, (0xFE) : call hex
