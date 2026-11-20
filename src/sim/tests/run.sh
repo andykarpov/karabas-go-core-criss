@@ -6,9 +6,9 @@ set -e
 cd "$(dirname "$0")"
 T=$(pwd); SRC=$(cd ../.. && pwd)
 W=$(mktemp -d); trap 'rm -r "$W"' EXIT
-for t in t1 t2 t3 t4 t5 t9; do /opt/sjasmplus/sjasmplus --nologo --msg=err --outprefix=$W/ $t.asm; done
+for t in t1 t2 t3 t4 t5 t9 t10; do /opt/sjasmplus/sjasmplus --nologo --msg=err --outprefix=$W/ $t.asm; done
 python3 -I $SRC/tools/cpmimg.py new $W/tst.cpm
-python3 -I $SRC/tools/cpmimg.py add $W/tst.cpm $W/t1.com $W/t2.com $W/t3.com $W/t4.com $W/t5.com $W/t9.com > /dev/null
+python3 -I $SRC/tools/cpmimg.py add $W/tst.cpm $W/t1.com $W/t2.com $W/t3.com $W/t4.com $W/t5.com $W/t9.com $W/t10.com > /dev/null
 make -s -C $SRC/fw/host
 fail=0
 check() {   # test, strings...
@@ -21,6 +21,7 @@ check t2 'screen 80x24 cp 1'
 check t3 'screen 64x30 cp 0' 'row 30: last line'
 check t4 'screen 80x24 cp 7' 'row 3: CP3 Robotron EN'
 check t5 'VER 4304' 'SYS ' '188B' 'FPU 40700000' 'TMR 04' 'INT 01' "CLK $(date +%H)" 'END'
+check t10 'REGS OK'
 # platforms (OSD switch 4): the text at row 5, column 10 (|: line start in the dump, 9 columns before it)
 for p in "0 CRISS AT" "1 ROBOTRON AT" "3 KAYPRO AT" "6 VT100 AT"; do
 	$SRC/fw/build-host/criss_host --rom $SRC/roms/kg/criss_data.bin --disk A:$W/tst.cpm --sw 4 ${p%% *} \

@@ -33,8 +33,8 @@
            W  a byte to it (dropped when full); 3c R: bit 0 the way to the port is full
      60 W  RTC_A: address of the RTC RAM of kg_mcu2 (rtc_mode 1: DS1307 registers 00..06, BCD);
      64 R  RTC_D: its byte;  68 W: { address 15..8, data 7..0 } written into the clock
-     50 R  SW: the OSD switches (kg_mcu2 SW, item i in bits 8i+7..8i, items 0..3)
-     54 R  SW2: items 4..7
+     78 R  SW: the OSD switches (kg_mcu2 SW, item i in bits 8i+7..8i, items 0..3)
+     7c R  SW2: items 4..7
      6c R  MOUSE: bits 31..24 buttons, 15..8 dy sum, 7..0 dx sum (signed, saturated; the read clears)
      30 W  INT: bit 8 request (level until the Z80 acknowledges it), bits 7..0 the byte of the
            acknowledge (IM 2 vector / IM 0 opcode); R: bit 8 still pending
@@ -505,8 +505,8 @@ always @(posedge clk) begin
 			end
 			8'h3c: io_dat <= { 31'd0, ser_tx_full };
 			8'h64: io_dat <= { 24'd0, rtc_do };
-			8'h50: io_dat <= sw[31:0];
-			8'h54: io_dat <= sw[63:32];
+			8'h78: io_dat <= sw[31:0];
+			8'h7c: io_dat <= sw[63:32];
 			8'h6c: begin
 				io_dat <= { ms_btn, 8'd0, ms_dy[7:0], ms_dx[7:0] };
 				ms_dx <= ms_wr ? sat8(9'sd0, ms_x) : 9'sd0;
