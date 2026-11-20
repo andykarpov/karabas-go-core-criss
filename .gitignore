@@ -1,1 +1,5 @@
 upstream/
+src/roms/kg/
+*.kg
+src/sim/build/
+src/fw/build*/
